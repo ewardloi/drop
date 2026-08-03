@@ -128,6 +128,7 @@
       tm.queueSend(pendingTarget.id, pendingTarget.name, entries);
       pendingTarget = null;
     });
+
     folderPicker.addEventListener("change", () => {
       if (!selfCanUpload) return;
       

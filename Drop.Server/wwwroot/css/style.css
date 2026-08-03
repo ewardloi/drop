@@ -240,6 +240,7 @@ p { margin: 0; }
   background: var(--color-bg-elevated);
   transition: border-color .12s ease, transform .12s ease, background .12s ease;
   position: relative;
+  user-select: none;
 }
 .device-card.download-only {
   opacity: 0.82;

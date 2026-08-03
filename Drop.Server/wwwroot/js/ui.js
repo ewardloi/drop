@@ -47,9 +47,9 @@
   }
   function initTheme() {
     const saved = localStorage.getItem(THEME_KEY) ?? "auto";
-    
+
     applyTheme(saved);
-    
+
     document.getElementById("theme-toggle").addEventListener("click", () => {
       const order = ["auto", "light", "dark"];
       const current = document.documentElement.getAttribute("data-theme");
@@ -64,7 +64,7 @@
 
     root.appendChild(node);
     log[kind === "error" ? "error" : "info"]("Toast:", message);
-    
+
     setTimeout(() => node.remove(), 5000);
   }
 
@@ -73,25 +73,20 @@
     const empty = document.getElementById("devices-empty");
     const count = document.getElementById("peer-count");
 
-    if (!selfCanUpload) {
-      count.textContent = "0 online";
-      grid.innerHTML = "";
-      empty.style.display = "flex";
-      return;
-    }
-
     count.textContent = `${peers.length} online`;
     grid.innerHTML = "";
     empty.style.display = peers.length === 0 ? "flex" : "none";
 
     for (const peer of peers) {
       const canUpload = peer.canUpload !== false;
+      const mode = canUpload && selfCanUpload ? "local" : "remote" 
+
       const card = el(`
         <div class="device-card ${canUpload ? "" : "download-only"} ${selfCanUpload ? "" : "upload-disabled"}" role="listitem" data-id="${peer.id}" title="${selfCanUpload ? "Click to send files, Shift+Click to send a folder, or drag files here" : "You are on a public network and can only receive files"}">
           <span class="status-dot pulse"></span>
           <div class="device-avatar">${ICON.laptop}</div>
           <div class="device-card-name">${escapeHtml(peer.name)}</div>
-          ${canUpload ? "" : '<div class="device-card-mode">download only</div>'}
+          <div class="device-card-mode">${mode}</div>
         </div>
       `);
 
@@ -387,7 +382,7 @@
     const speedText = ["sending", "receiving"].includes(job.status) && job.speedBytesPerSecond > 0
       ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
       : "";
-    
+
     const subtitle = [speedText, `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`].filter(Boolean).join(" • ");
 
     const card = el(`
@@ -632,12 +627,12 @@
         } else {
           const url = URL.createObjectURL(file);
           const a = document.createElement('a');
-  
+
           a.href = url;
           a.download = fileName;
           document.body.appendChild(a);
           a.click();
-          
+
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }
@@ -646,7 +641,7 @@
       } catch (err) {
         if (err?.name === "AbortError") {
           log.info(`Download canceled by user for ${entry.relativePath}`);
-          continue; 
+          continue;
         }
 
         log.error(`Failed downloading ${entry.relativePath}`, err);
