@@ -1,0 +1,25 @@
+# Ignore Git metadata
+.git/
+.gitignore
+
+# Ignore build and local artifacts
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.suo
+*.cache
+*.log
+
+# Ignore OS and editor junk
+.DS_Store
+Thumbs.db
+
+# Ignore environment files
+.env
+.env.*
+
+# Ignore temp files
+*.tmp
+*.temp

@@ -1,0 +1,12 @@
+services:
+  beam:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: drop:latest
+    container_name: drop
+    restart: unless-stopped
+    ports:
+      - "10010:5000"
+    environment:
+      - ASPNETCORE_URLS=http://+:5000

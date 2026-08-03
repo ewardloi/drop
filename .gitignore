@@ -1,0 +1,26 @@
+# Build and runtime artifacts
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+
+# Visual Studio / .NET
+.vs/
+.vscode/
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker / local env
+.env
+.env.*
+
+# Project-specific generated data
+*.tmp
+*.temp
