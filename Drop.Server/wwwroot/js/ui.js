@@ -619,52 +619,58 @@
   async function downloadEntriesAsZip(entries) {
     if (!Array.isArray(entries) || entries.length === 0) return;
 
-    if (!window.JSZip) {
-      log.warn("JSZip is unavailable, falling back to individual downloads");
+    const filename = `received-files-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
+
+    async function* fileGenerator() {
       for (const entry of entries) {
-        await downloadEntry(entry);
-        await new Promise((r) => setTimeout(r, 250));
-      }
-      return;
-    }
+        try {
+          const file = await window.OpfsStore.getFile(entry);
 
-    const zip = new window.JSZip();
+          yield {
+            name: entry.relativePath,
+            input: file,
+          };
+        } catch (err) {
+          log.error(`Failed adding ${entry.relativePath} to zip`, err);
 
-    for (const entry of entries) {
-      try {
-        const file = await window.OpfsStore.getFile(entry);
-        const bytes = await file.arrayBuffer();
-        zip.file(entry.relativePath, bytes, {
-          compression: "STORE",
-          createFolders: true,
-        });
-      } catch (err) {
-        log.error(`Failed adding ${entry.relativePath} to zip`, err);
-        toast(`Could not include ${entry.relativePath} in archive: ${err.message}`, "error");
-        return;
+          toast(`Could not include ${entry.relativePath} in archive: ${err.message}`, "error");
+
+          throw err;
+        }
       }
     }
 
     try {
-      const blob = await zip.generateAsync({
-        type: "blob",
-        compression: "STORE",
-      });
+      const { downloadZip } = await getClientZip();
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const zipResponse = downloadZip(fileGenerator());
 
-      a.href = url;
-      a.download = `received-files-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
+      if (window.showSaveFilePicker) {
+        const handle = await window.showSaveFilePicker({ suggestedName: filename });
+        const writable = await handle.createWritable();
+        await zipResponse.body.pipeTo(writable);
+      } else {
+        const blob = await zipResponse.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
 
-      document.body.appendChild(a);
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
 
-      a.click();
-      a.remove();
+        a.click();
+        a.remove();
 
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      log.info(`Downloaded ${entries.length} received file(s) as a ZIP archive`);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+
+      log.info(`Streamed ${entries.length} received file(s) into ZIP archive`);
     } catch (err) {
+      if (err?.name === "AbortError") {
+        log.info("ZIP save canceled by user");
+        return;
+      }
+
       log.error("Failed creating ZIP archive", err);
       toast(`Could not create archive: ${err.message}`, "error");
     }
@@ -689,6 +695,13 @@
       log.error(`Failed to download ${entry.relativePath}`, err);
       toast(`Could not download ${entry.relativePath}: ${err.message}`, "error");
     }
+  }
+
+  async function getClientZip() {
+    if (!window.clientZip) {
+      window.clientZip = await import("/lib/client-zip.min.js");
+    }
+    return window.clientZip;
   }
 
   window.UI = {
