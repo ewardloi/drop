@@ -7,9 +7,10 @@
     const out = [];
 
     for (const file of fileList) {
-      const relativePath = file.webkitRelativePath && file.webkitRelativePath.length > 0
-        ? file.webkitRelativePath
-        : file.name;
+      const relativePath =
+        file.webkitRelativePath && file.webkitRelativePath.length > 0
+          ? file.webkitRelativePath
+          : file.name;
       out.push({ file, relativePath });
     }
 
@@ -22,18 +23,21 @@
       const all = [];
 
       function readBatch() {
-        reader.readEntries((entries) => {
-          if (entries.length === 0) {
-            resolve(all);
-            return;
-          }
+        reader.readEntries(
+          (entries) => {
+            if (entries.length === 0) {
+              resolve(all);
+              return;
+            }
 
-          all.push(...entries);
-          readBatch();
-        }, (err) => {
-          log.error("Directory reader failed", err);
-          reject(err);
-        });
+            all.push(...entries);
+            readBatch();
+          },
+          (err) => {
+            log.error("Directory reader failed", err);
+            reject(err);
+          },
+        );
       }
       readBatch();
     });
@@ -83,7 +87,7 @@
 
     for (const item of items) {
       if (item.kind !== "file") continue;
-      
+
       if (typeof item.webkitGetAsEntry === "function") {
         const entry = item.webkitGetAsEntry();
         if (entry) entries.push(entry);
@@ -97,7 +101,9 @@
       await walkEntry(entry, out);
     }
 
-    log.info(`Resolved ${out.length} file(s) from drag-and-drop (directories expanded)`);
+    log.info(
+      `Resolved ${out.length} file(s) from drag-and-drop (directories expanded)`,
+    );
     return out;
   }
 

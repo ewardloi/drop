@@ -1,187 +1,355 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="auto">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Drop - File Transfer</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Send files directly between devices on your network, no size limit, no memory buffering."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%230559C9%22/></svg>"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <title>Drop - File Transfer</title>
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="description"
-    content="Send files directly between devices on your network, no size limit, no memory buffering." />
-  <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%230559C9%22/></svg>" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css" />
-</head>
-
-<body>
-  <div id="drop-overlay" class="drop-overlay" aria-hidden="true">
-    <div class="drop-overlay-inner">
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
-        <path d="M12 3v13M12 16l-5-5M12 16l5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-          stroke-linejoin="round" />
-        <path d="M4 19h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-      </svg>
-      <p>Drop to choose a recipient</p>
-    </div>
-  </div>
-
-  <header class="topbar">
-    <div class="topbar-left">
-      <span class="brand-mark" aria-hidden="true">
-        <svg width="22" height="22" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
-          xmlns:xlink="http://www.w3.org/1999/xlink">
-          <g id="App-Icon" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-            <g id="AirDrop" transform="translate(17.000000, 36.000000)">
-              <circle id="Oval" fill="#007AFF" cx="495" cy="495" r="24" />
-              <path
-                d="M495,575 C539.18278,575 575,539.18278 575,495 C575,450.81722 539.18278,415 495,415 C450.81722,415 415,450.81722 415,495 C415,539.18278 450.81722,575 495,575 Z"
-                id="Oval" stroke="#007AFF" stroke-width="44.9122807" stroke-linecap="round" stroke-linejoin="round"
-                stroke-dasharray="385,125"
-                transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) " />
-              <path
-                d="M495,665 C588.888407,665 665,588.888407 665,495 C665,401.111593 588.888407,325 495,325 C401.111593,325 325,401.111593 325,495 C325,588.888407 401.111593,665 495,665 Z"
-                id="Oval-Copy" stroke="#007AFF" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"
-                stroke-dasharray="842,202"
-                transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) " />
-              <path
-                d="M495,755 C638.594035,755 755,638.594035 755,495 C755,351.405965 638.594035,235 495,235 C351.405965,235 235,351.405965 235,495 C235,638.594035 351.405965,755 495,755 Z"
-                id="Oval-Copy-2" stroke="#007AFF" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"
-                stroke-dasharray="1302,282"
-                transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) " />
-              <path
-                d="M495,845 C688.299662,845 845,688.299662 845,495 C845,301.700338 688.299662,145 495,145 C301.700338,145 145,301.700338 145,495 C145,688.299662 301.700338,845 495,845 Z"
-                id="Oval-Copy-3" stroke="#007AFF" stroke-width="46.6666667" stroke-linecap="round"
-                stroke-linejoin="round" stroke-dasharray="1758,368"
-                transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) " />
-            </g>
-          </g>
-        </svg>
-      </span>
-      <span class="brand-name">Drop</span>
-    </div>
-
-    <div class="topbar-right">
-      <button id="theme-toggle" class="icon-btn" type="button" title="Change theme" aria-label="Change theme">
-        <svg id="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6" />
+  <body>
+    <div id="drop-overlay" class="drop-overlay" aria-hidden="true">
+      <div class="drop-overlay-inner">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
           <path
-            d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"
-            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            d="M12 3v13M12 16l-5-5M12 16l5-5"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M4 19h16"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
         </svg>
-        <svg id="theme-icon-dark" width="18" height="18" viewBox="0 0 24 24" fill="none" style="display:none">
-          <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z" stroke="currentColor" stroke-width="1.6"
-            stroke-linejoin="round" />
-        </svg>
-        <svg id="theme-icon-auto" width="18" height="18" viewBox="0 0 24 24" fill="none" style="display:none">
-          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" />
-          <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" />
-        </svg>
-        <span id="theme-label" class="icon-btn-label">Auto</span>
-      </button>
-
-      <button id="my-device-btn" class="device-chip" type="button" title="Edit this device's name">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6" />
-          <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-        </svg>
-        <span id="my-device-name">This device</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-          <path d="M4 20l1-4L17 4l3 3L8 19l-4 1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-        </svg>
-      </button>
+        <p>Drop to choose a recipient</p>
+      </div>
     </div>
-  </header>
 
-  <main class="layout">
-
-    <section class="panel devices-panel">
-      <div class="panel-header">
-        <h2>Nearby devices</h2>
-        <span id="peer-count" class="pill">0 online</span>
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand-mark" aria-hidden="true">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 1024 1024"
+            version="1.1"
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+          >
+            <g
+              id="App-Icon"
+              stroke="none"
+              stroke-width="1"
+              fill="none"
+              fill-rule="evenodd"
+            >
+              <g id="AirDrop" transform="translate(17.000000, 36.000000)">
+                <circle id="Oval" fill="#007AFF" cx="495" cy="495" r="24" />
+                <path
+                  d="M495,575 C539.18278,575 575,539.18278 575,495 C575,450.81722 539.18278,415 495,415 C450.81722,415 415,450.81722 415,495 C415,539.18278 450.81722,575 495,575 Z"
+                  id="Oval"
+                  stroke="#007AFF"
+                  stroke-width="44.9122807"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-dasharray="385,125"
+                  transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) "
+                />
+                <path
+                  d="M495,665 C588.888407,665 665,588.888407 665,495 C665,401.111593 588.888407,325 495,325 C401.111593,325 325,401.111593 325,495 C325,588.888407 401.111593,665 495,665 Z"
+                  id="Oval-Copy"
+                  stroke="#007AFF"
+                  stroke-width="48"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-dasharray="842,202"
+                  transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) "
+                />
+                <path
+                  d="M495,755 C638.594035,755 755,638.594035 755,495 C755,351.405965 638.594035,235 495,235 C351.405965,235 235,351.405965 235,495 C235,638.594035 351.405965,755 495,755 Z"
+                  id="Oval-Copy-2"
+                  stroke="#007AFF"
+                  stroke-width="48"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-dasharray="1302,282"
+                  transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) "
+                />
+                <path
+                  d="M495,845 C688.299662,845 845,688.299662 845,495 C845,301.700338 688.299662,145 495,145 C301.700338,145 145,301.700338 145,495 C145,688.299662 301.700338,845 495,845 Z"
+                  id="Oval-Copy-3"
+                  stroke="#007AFF"
+                  stroke-width="46.6666667"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-dasharray="1758,368"
+                  transform="translate(495.000000, 495.000000) rotate(-42.000000) translate(-495.000000, -495.000000) "
+                />
+              </g>
+            </g>
+          </svg>
+        </span>
+        <span class="brand-name">Drop</span>
       </div>
-      <div id="devices-empty" class="empty-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4" />
-          <path d="M8.5 15c1-1.2 2.2-1.8 3.5-1.8s2.5.6 3.5 1.8M9.3 10h.01M14.7 10h.01" stroke="currentColor"
-            stroke-width="1.4" stroke-linecap="round" />
-        </svg>
-        <p>No other devices found yet</p>
+
+      <div class="topbar-right">
+        <button
+          id="theme-toggle"
+          class="icon-btn"
+          type="button"
+          title="Change theme"
+          aria-label="Change theme"
+        >
+          <svg
+            id="theme-icon-light"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="4.2"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path
+              d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg
+            id="theme-icon-dark"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            style="display: none"
+          >
+            <path
+              d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <svg
+            id="theme-icon-auto"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            style="display: none"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" />
+          </svg>
+          <span id="theme-label" class="icon-btn-label">Auto</span>
+        </button>
+
+        <button
+          id="my-device-btn"
+          class="device-chip"
+          type="button"
+          title="Edit this device's name"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect
+              x="3"
+              y="4"
+              width="18"
+              height="13"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path
+              d="M8 21h8M12 17v4"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span id="my-device-name">This device</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 20l1-4L17 4l3 3L8 19l-4 1Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
-      <div id="devices-grid" class="devices-grid" role="list"></div>
-    </section>
+    </header>
 
-    <section class="panel transfers-panel">
-      <div class="panel-header">
-        <h2>Transfers</h2>
-      </div>
+    <main class="layout">
+      <section class="panel devices-panel">
+        <div class="panel-header">
+          <h2>Nearby devices</h2>
+          <span id="peer-count" class="pill">0 online</span>
+        </div>
+        <div id="devices-empty" class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+            <path
+              d="M8.5 15c1-1.2 2.2-1.8 3.5-1.8s2.5.6 3.5 1.8M9.3 10h.01M14.7 10h.01"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          <p>No other devices found yet</p>
+        </div>
+        <div id="devices-grid" class="devices-grid" role="list"></div>
+      </section>
 
-      <div id="incoming-requests" class="stack"></div>
+      <section class="panel transfers-panel">
+        <div class="panel-header">
+          <h2>Transfers</h2>
+        </div>
 
-      <div id="active-transfers-empty" class="empty-state small">
-        <p>No active transfers.</p>
-      </div>
-      <div id="active-transfers" class="stack"></div>
+        <div id="incoming-requests" class="stack"></div>
 
-      <div id="received-files-section">
-        <div class="panel-header sub-header">
-          <h3>Received files</h3>
-          <div class="panel-header-actions">
-            <button id="download-all-btn" class="btn-secondary" type="button" hidden>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3v12M12 15l-4.5-4.5M12 15l4.5-4.5" stroke="currentColor" stroke-width="1.6"
-                  stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M4 20h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-              </svg>
-              Download all
-            </button>
-            <button id="clear-all-btn" class="btn-danger" type="button" hidden>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M4 6h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                <path d="M8 6l1 14h6l1-14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              Clear all
-            </button>
+        <div id="active-transfers-empty" class="empty-state small">
+          <p>No active transfers.</p>
+        </div>
+        <div id="active-transfers" class="stack"></div>
+
+        <div id="received-files-section">
+          <div class="panel-header sub-header">
+            <h3>Received files</h3>
+            <div class="panel-header-actions">
+              <button
+                id="download-all-btn"
+                class="btn-secondary"
+                type="button"
+                hidden
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 3v12M12 15l-4.5-4.5M12 15l4.5-4.5"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M4 20h16"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <span class="btn-label">Download all</span>
+              </button>
+              <button
+                id="clear-all-btn"
+                class="btn-danger"
+                type="button"
+                hidden
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M4 6h16"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M8 6l1 14h6l1-14"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                Clear all
+              </button>
+            </div>
           </div>
+          <div id="received-empty" class="empty-state small">
+            <p>Nothing received yet.</p>
+          </div>
+          <div id="received-files" class="stack"></div>
         </div>
-        <div id="received-empty" class="empty-state small">
-          <p>Nothing received yet.</p>
+      </section>
+    </main>
+
+    <input type="file" id="file-picker" multiple hidden />
+    <input type="file" id="folder-picker" webkitdirectory hidden />
+
+    <dialog id="name-dialog" class="dialog">
+      <form method="dialog" id="name-form">
+        <h3>What's this device called?</h3>
+        <p class="dialog-hint">
+          Other people on the network will see this name when you're online.
+        </p>
+        <input
+          id="name-input"
+          type="text"
+          maxlength="40"
+          placeholder="e.g. Marek's Laptop"
+          autocomplete="off"
+          required
+        />
+        <div class="dialog-actions">
+          <button type="submit" class="btn-primary">Save</button>
         </div>
-        <div id="received-files" class="stack"></div>
-      </div>
-    </section>
+      </form>
+    </dialog>
 
-  </main>
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
-  <input type="file" id="file-picker" multiple hidden />
-  <input type="file" id="folder-picker" webkitdirectory hidden />
-
-  <dialog id="name-dialog" class="dialog">
-    <form method="dialog" id="name-form">
-      <h3>What's this device called?</h3>
-      <p class="dialog-hint">Other people on the network will see this name when you're online.</p>
-      <input id="name-input" type="text" maxlength="40" placeholder="e.g. Marek's Laptop" autocomplete="off" required />
-      <div class="dialog-actions">
-        <button type="submit" class="btn-primary">Save</button>
-      </div>
-    </form>
-  </dialog>
-
-  <div id="toast-root" class="toast-root" aria-live="polite"></div>
-
-  <script src="js/logger.js"></script>
-  <script src="js/opfs.js"></script>
-  <script src="js/file-walker.js"></script>
-  <script src="js/ws-client.js"></script>
-  <script src="js/transfer-manager.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/app.js"></script>
-</body>
-
+    <script src="js/logger.js"></script>
+    <script src="js/opfs.js"></script>
+    <script src="js/file-walker.js"></script>
+    <script src="js/ws-client.js"></script>
+    <script src="js/transfer-manager.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+  </body>
 </html>

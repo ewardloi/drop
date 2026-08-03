@@ -3,7 +3,11 @@
 
   function ts() {
     const d = new Date();
-    return d.toTimeString().split(" ")[0] + "." + String(d.getMilliseconds()).padStart(3, "0");
+    return (
+      d.toTimeString().split(" ")[0] +
+      "." +
+      String(d.getMilliseconds()).padStart(3, "0")
+    );
   }
 
   function make(tag, color) {
@@ -29,7 +33,7 @@
   window.addEventListener("error", (e) => {
     window.Log.app.error("Uncaught error:", e.error || e.message, e);
   });
-  
+
   window.addEventListener("unhandledrejection", (e) => {
     window.Log.app.error("Unhandled promise rejection:", e.reason);
   });

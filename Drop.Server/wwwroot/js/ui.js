@@ -36,10 +36,14 @@
   const THEME_KEY = "drop.theme";
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    document.getElementById("theme-icon-light").style.display = theme === "light" ? "" : "none";
-    document.getElementById("theme-icon-dark").style.display = theme === "dark" ? "" : "none";
-    document.getElementById("theme-icon-auto").style.display = theme === "auto" ? "" : "none";
-    document.getElementById("theme-label").textContent = theme[0].toUpperCase() + theme.slice(1);
+    document.getElementById("theme-icon-light").style.display =
+      theme === "light" ? "" : "none";
+    document.getElementById("theme-icon-dark").style.display =
+      theme === "dark" ? "" : "none";
+    document.getElementById("theme-icon-auto").style.display =
+      theme === "auto" ? "" : "none";
+    document.getElementById("theme-label").textContent =
+      theme[0].toUpperCase() + theme.slice(1);
 
     localStorage.setItem(THEME_KEY, theme);
 
@@ -79,7 +83,7 @@
 
     for (const peer of peers) {
       const canUpload = peer.canUpload !== false;
-      const mode = canUpload && selfCanUpload ? "local" : "remote" 
+      const mode = canUpload && selfCanUpload ? "local" : "remote";
 
       const card = el(`
         <div class="device-card ${canUpload ? "" : "download-only"} ${selfCanUpload ? "" : "upload-disabled"}" role="listitem" data-id="${peer.id}" title="${selfCanUpload ? "Click to send files, Shift+Click to send a folder, or drag files here" : "You are on a public network and can only receive files"}">
@@ -92,7 +96,10 @@
 
       card.addEventListener("click", (e) => {
         if (!selfCanUpload) {
-          toast("You are outside the local network, so you can only receive files.", "error");
+          toast(
+            "You are outside the local network, so you can only receive files.",
+            "error",
+          );
           return;
         }
         onPick(peer, e.shiftKey ? "folder" : "files");
@@ -107,12 +114,17 @@
         card.classList.add("drag-over");
       });
 
-      card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+      card.addEventListener("dragleave", () =>
+        card.classList.remove("drag-over"),
+      );
 
       card.addEventListener("drop", async (e) => {
         if (!selfCanUpload) {
           e.preventDefault();
-          toast("You are outside the local network, so you can only receive files.", "error");
+          toast(
+            "You are outside the local network, so you can only receive files.",
+            "error",
+          );
           return;
         }
 
@@ -122,9 +134,10 @@
 
         try {
           const items = e.dataTransfer.items;
-          const entries = items && items.length > 0
-            ? await window.FileWalker.fromDataTransferItems(items)
-            : window.FileWalker.fromFileList(e.dataTransfer.files);
+          const entries =
+            items && items.length > 0
+              ? await window.FileWalker.fromDataTransferItems(items)
+              : window.FileWalker.fromFileList(e.dataTransfer.files);
 
           if (entries.length === 0) {
             toast("No files found in what was dropped.", "error");
@@ -199,7 +212,13 @@
       const key = `${job.fromId || job.fromName}`;
 
       if (!groups.has(key)) {
-        groups.set(key, { fromName: job.fromName, transferIds: [], files: [], totalBytes: 0, canAct: false });
+        groups.set(key, {
+          fromName: job.fromName,
+          transferIds: [],
+          files: [],
+          totalBytes: 0,
+          canAct: false,
+        });
       }
 
       const group = groups.get(key);
@@ -213,12 +232,20 @@
     for (const group of groups.values()) {
       const visibleFiles = group.files.slice(0, 8);
 
-      const filesHtml = visibleFiles.map((f) => `
+      const filesHtml = visibleFiles
+        .map(
+          (f) => `
         <div class="file-list-mini-row"><span>${escapeHtml(f.relativePath || f.name)}</span><span>${formatBytes(f.size)}</span></div>
-      `).join("");
+      `,
+        )
+        .join("");
 
-      const more = group.files.length > visibleFiles.length ? `<div class="file-list-mini-row"><span>+ ${group.files.length - visibleFiles.length} more</span><span></span></div>` : "";
-      const fileLabel = group.files.length === 1 ? "1 file" : `${group.files.length} files`;
+      const more =
+        group.files.length > visibleFiles.length
+          ? `<div class="file-list-mini-row"><span>+ ${group.files.length - visibleFiles.length} more</span><span></span></div>`
+          : "";
+      const fileLabel =
+        group.files.length === 1 ? "1 file" : `${group.files.length} files`;
       const canAct = group.canAct || group.transferIds.length > 0;
 
       const card = el(`
@@ -241,37 +268,48 @@
       const acceptBtn = card.querySelector(".accept-btn");
       const rejectBtn = card.querySelector(".reject-btn");
 
-      if (acceptBtn) acceptBtn.addEventListener("click", () => onDecision(group.transferIds, true));
-      if (rejectBtn) rejectBtn.addEventListener("click", () => onDecision(group.transferIds, false));
+      if (acceptBtn)
+        acceptBtn.addEventListener("click", () =>
+          onDecision(group.transferIds, true),
+        );
+      if (rejectBtn)
+        rejectBtn.addEventListener("click", () =>
+          onDecision(group.transferIds, false),
+        );
 
       root.appendChild(card);
     }
   }
 
   function statusLabel(status) {
-    return {
-      queued: "Queued",
-      requesting: "Waiting for response",
-      sending: "Sending",
-      receiving: "Receiving",
-      done: "Done",
-      rejected: "Rejected",
-      canceled: "Canceled",
-      error: "Failed",
-      "pending-queue": "Queued",
-      "pending-decision": "Awaiting your response",
-    }[status] || status;
+    return (
+      {
+        queued: "Queued",
+        requesting: "Waiting for response",
+        sending: "Sending",
+        receiving: "Receiving",
+        done: "Done",
+        rejected: "Rejected",
+        canceled: "Canceled",
+        error: "Failed",
+        "pending-queue": "Queued",
+        "pending-decision": "Awaiting your response",
+      }[status] || status
+    );
   }
 
   function statusClass(status) {
-    if (["sending", "receiving", "requesting"].includes(status)) return "active";
+    if (["sending", "receiving", "requesting"].includes(status))
+      return "active";
     if (["done"].includes(status)) return "done";
     if (["rejected", "canceled", "error"].includes(status)) return "rejected";
     return "queued";
   }
 
   function fileStatusForTransfer(job, fileIndex) {
-    const currentIndex = Number.isInteger(job.currentFileIndex) ? job.currentFileIndex : -1;
+    const currentIndex = Number.isInteger(job.currentFileIndex)
+      ? job.currentFileIndex
+      : -1;
     if (job.status === "done") return "done";
 
     if (job.status === "canceled") {
@@ -287,20 +325,25 @@
     }
 
     if (fileIndex < currentIndex) return "done";
-    if (fileIndex === currentIndex && ["sending", "receiving", "requesting"].includes(job.status)) return "active";
+    if (
+      fileIndex === currentIndex &&
+      ["sending", "receiving", "requesting"].includes(job.status)
+    )
+      return "active";
     return "queued";
   }
 
   function createTransferFileRow(file, index, job) {
     const status = fileStatusForTransfer(job, index);
 
-    const label = status === "active"
-      ? "Active"
-      : status === "done"
-        ? "Done"
-        : status === "rejected"
-          ? "Canceled"
-          : "Queued";
+    const label =
+      status === "active"
+        ? "Active"
+        : status === "done"
+          ? "Done"
+          : status === "rejected"
+            ? "Canceled"
+            : "Queued";
 
     const path = file.relativePath || file.name || `File ${index + 1}`;
     const row = el(`
@@ -312,7 +355,8 @@
 
     row.querySelector("span:first-child").textContent = path;
     row.querySelector(".file-status-pill").textContent = label;
-    row.querySelector(".file-status-pill").className = `file-status-pill ${status}`;
+    row.querySelector(".file-status-pill").className =
+      `file-status-pill ${status}`;
 
     return row;
   }
@@ -341,13 +385,14 @@
 
     for (const [index, file] of job.files.entries()) {
       const status = fileStatusForTransfer(job, index);
-      const label = status === "active"
-        ? "Active"
-        : status === "done"
-          ? "Done"
-          : status === "rejected"
-            ? "Canceled"
-            : "Queued";
+      const label =
+        status === "active"
+          ? "Active"
+          : status === "done"
+            ? "Done"
+            : status === "rejected"
+              ? "Canceled"
+              : "Queued";
 
       const path = file.relativePath || file.name || `File ${index + 1}`;
       const row = existing.get(index);
@@ -374,16 +419,34 @@
 
     const peerName = isOut ? job.targetName : job.fromName;
     const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
-    const pct = job.totalBytes > 0 ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100)) : 0;
-    const currentFile = job.files[job.currentFileIndex]?.name || job.files[job.currentFileIndex]?.relativePath || peerName;
+    const pct =
+      job.totalBytes > 0
+        ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100))
+        : 0;
+    const currentFile =
+      job.files[job.currentFileIndex]?.name ||
+      job.files[job.currentFileIndex]?.relativePath ||
+      peerName;
     const currentFileSize = job.files[job.currentFileIndex]?.size;
-    const currentFileTitle = currentFileSize != null ? `${currentFile} • ${formatBytes(currentFileSize)}` : currentFile;
-    const canCancel = ["queued", "requesting", "sending", "receiving"].includes(job.status);
-    const speedText = ["sending", "receiving"].includes(job.status) && job.speedBytesPerSecond > 0
-      ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
-      : "";
+    const currentFileTitle =
+      currentFileSize != null
+        ? `${currentFile} • ${formatBytes(currentFileSize)}`
+        : currentFile;
+    const canCancel = ["queued", "requesting", "sending", "receiving"].includes(
+      job.status,
+    );
+    const speedText =
+      ["sending", "receiving"].includes(job.status) &&
+      job.speedBytesPerSecond > 0
+        ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
+        : "";
 
-    const subtitle = [speedText, `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`].filter(Boolean).join(" • ");
+    const subtitle = [
+      speedText,
+      `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
+    ]
+      .filter(Boolean)
+      .join(" • ");
 
     const card = el(`
       <div class="card" data-transfer-id="${job.transferId}">
@@ -408,16 +471,34 @@
     const isOut = job.direction === "outgoing";
     const peerName = isOut ? job.targetName : job.fromName;
     const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
-    const pct = job.totalBytes > 0 ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100)) : 0;
-    const currentFile = job.files[job.currentFileIndex]?.name || job.files[job.currentFileIndex]?.relativePath || peerName;
+    const pct =
+      job.totalBytes > 0
+        ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100))
+        : 0;
+    const currentFile =
+      job.files[job.currentFileIndex]?.name ||
+      job.files[job.currentFileIndex]?.relativePath ||
+      peerName;
     const currentFileSize = job.files[job.currentFileIndex]?.size;
-    const currentFileTitle = currentFileSize != null ? `${currentFile} • ${formatBytes(currentFileSize)}` : currentFile;
-    const canCancel = ["queued", "requesting", "sending", "receiving"].includes(job.status);
-    const speedText = ["sending", "receiving"].includes(job.status) && job.speedBytesPerSecond > 0
-      ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
-      : "";
+    const currentFileTitle =
+      currentFileSize != null
+        ? `${currentFile} • ${formatBytes(currentFileSize)}`
+        : currentFile;
+    const canCancel = ["queued", "requesting", "sending", "receiving"].includes(
+      job.status,
+    );
+    const speedText =
+      ["sending", "receiving"].includes(job.status) &&
+      job.speedBytesPerSecond > 0
+        ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
+        : "";
 
-    const subtitle = [speedText, `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`].filter(Boolean).join(" • ");
+    const subtitle = [
+      speedText,
+      `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
+    ]
+      .filter(Boolean)
+      .join(" • ");
 
     const titleEl = card.querySelector(".card-title");
     const subEl = card.querySelector(".card-sub");
@@ -454,13 +535,14 @@
     const root = document.getElementById("active-transfers");
     const emptyEl = document.getElementById("active-transfers-empty");
 
-    const relevant = [...outgoingJobs, ...incomingJobs]
-      .filter((j) => !["pending-queue", "pending-decision"].includes(j.status));
+    const relevant = [...outgoingJobs, ...incomingJobs].filter(
+      (j) => !["pending-queue", "pending-decision"].includes(j.status),
+    );
 
     emptyEl.style.display = relevant.length === 0 ? "flex" : "none";
 
     const existingCards = new Map();
-    for (const card of root.querySelectorAll('.card[data-transfer-id]')) {
+    for (const card of root.querySelectorAll(".card[data-transfer-id]")) {
       existingCards.set(card.dataset.transferId, card);
     }
 
@@ -502,7 +584,9 @@
       </div>
     `);
 
-    row.querySelector(".dl-btn").addEventListener("click", () => downloadEntry(entry));
+    row
+      .querySelector(".dl-btn")
+      .addEventListener("click", () => downloadEntry(entry));
     row.querySelector(".del-btn").addEventListener("click", async () => {
       try {
         await window.OpfsStore.deleteEntry(entry);
@@ -510,7 +594,10 @@
         renderReceivedFiles();
       } catch (err) {
         log.error("Delete failed", err);
-        toast(`Could not delete ${entry.relativePath}: ${err.message}`, "error");
+        toast(
+          `Could not delete ${entry.relativePath}: ${err.message}`,
+          "error",
+        );
       }
     });
 
@@ -528,7 +615,33 @@
     sub.textContent = formatBytes(entry.size);
   }
 
-  async function renderReceivedFiles() {
+  const INCOMING_TERMINAL_STATUSES = new Set([
+    "done",
+    "rejected",
+    "canceled",
+    "error",
+  ]);
+
+  function isTransferSettled(transferId, tm) {
+    if (!tm) return true;
+    
+    const job = tm.incoming.get(transferId);
+
+    if (!job) return true;
+    
+    return INCOMING_TERMINAL_STATUSES.has(job.status);
+  }
+
+  function activeIncomingTransferIds(tm) {
+    const ids = new Set();
+    if (!tm) return ids;
+    for (const [transferId, job] of tm.incoming.entries()) {
+      if (!INCOMING_TERMINAL_STATUSES.has(job.status)) ids.add(transferId);
+    }
+    return ids;
+  }
+
+  async function renderReceivedFiles(tm) {
     const root = document.getElementById("received-files");
     const section = document.getElementById("received-files-section");
     const empty = document.getElementById("received-empty");
@@ -539,12 +652,16 @@
 
     try {
       entries = await window.OpfsStore.listAllReceived();
+      entries = entries.filter((entry) =>
+        isTransferSettled(entry.transferId, tm),
+      );
     } catch (err) {
       log.error("Failed to list received files", err);
       root.replaceChildren();
       empty.style.display = "flex";
       section.style.display = "none";
-      empty.querySelector("p").textContent = `Could not read local storage: ${err.message}`;
+      empty.querySelector("p").textContent =
+        `Could not read local storage: ${err.message}`;
       clearAllBtn.hidden = true;
       clearAllBtn.style.display = "none";
       downloadAllBtn.hidden = true;
@@ -597,9 +714,9 @@
 
     clearAllBtn.onclick = async () => {
       try {
-        await window.OpfsStore.clearAllReceived();
+        await window.OpfsStore.clearAllReceived(activeIncomingTransferIds(tm));
         toast("Cleared all received files", "success");
-        await renderReceivedFiles();
+        await renderReceivedFiles(tm);
       } catch (err) {
         log.error("Failed clearing received files", err);
         toast(`Could not clear received files: ${err.message}`, "error");
@@ -614,40 +731,61 @@
   async function downloadEntries(entries) {
     if (!Array.isArray(entries) || entries.length === 0) return;
 
+    const prepared = [];
     for (const entry of entries) {
       try {
         const file = await window.OpfsStore.getFile(entry);
-
-        const fileName = entry.relativePath ? entry.relativePath.split('/').pop() : entry.name || 'file';
-
-        if (window.showSaveFilePicker) {
-          const handle = await window.showSaveFilePicker({ suggestedName: fileName });
-          const writable = await handle.createWritable();
-          await file.stream().pipeTo(writable);
-        } else {
-          const url = URL.createObjectURL(file);
-          const a = document.createElement('a');
-
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-
-        log.info(`Successfully downloaded ${fileName}`);
+        const fileName = entry.relativePath
+          ? entry.relativePath.split("/").pop()
+          : entry.name || "file";
+        prepared.push({ entry, file, fileName });
       } catch (err) {
-        if (err?.name === "AbortError") {
-          log.info(`Download canceled by user for ${entry.relativePath}`);
-          continue;
-        }
-
-        log.error(`Failed downloading ${entry.relativePath}`, err);
-        toast(`Could not download ${entry.relativePath}: ${err.message}`, "error");
+        log.error(`Failed reading ${entry.relativePath} for download`, err);
+        toast(`Could not read ${entry.relativePath}: ${err.message}`, "error");
       }
     }
+
+    if (prepared.length === 0) return;
+
+    if (window.showSaveFilePicker) {
+      for (const { entry, file, fileName } of prepared) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+          });
+          const writable = await handle.createWritable();
+          await file.stream().pipeTo(writable);
+          log.info(`Successfully downloaded ${fileName}`);
+        } catch (err) {
+          if (err?.name === "AbortError") {
+            log.info(`Download canceled by user for ${entry.relativePath}`);
+            continue;
+          }
+          log.error(`Failed downloading ${entry.relativePath}`, err);
+          toast(
+            `Could not download ${entry.relativePath}: ${err.message}`,
+            "error",
+          );
+        }
+      }
+      return;
+    }
+
+    const urls = [];
+    for (const { fileName, file } of prepared) {
+      const url = URL.createObjectURL(file);
+      urls.push(url);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 10000);
+    log.info(`Triggered ${prepared.length} download(s)`);
   }
 
   async function downloadEntry(entry) {
@@ -667,12 +805,22 @@
       log.info(`Downloading ${entry.relativePath}`);
     } catch (err) {
       log.error(`Failed to download ${entry.relativePath}`, err);
-      toast(`Could not download ${entry.relativePath}: ${err.message}`, "error");
+      toast(
+        `Could not download ${entry.relativePath}: ${err.message}`,
+        "error",
+      );
     }
   }
 
   window.UI = {
-    formatBytes, initTheme, toast, renderDevices, initGlobalDropOverlay,
-    renderIncomingRequests, renderActiveTransfers, renderReceivedFiles, escapeHtml,
+    formatBytes,
+    initTheme,
+    toast,
+    renderDevices,
+    initGlobalDropOverlay,
+    renderIncomingRequests,
+    renderActiveTransfers,
+    renderReceivedFiles,
+    escapeHtml,
   };
 })();

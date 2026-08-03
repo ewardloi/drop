@@ -78,21 +78,26 @@
 
     document.getElementById("my-device-name").textContent = clientName;
 
-    document.getElementById("my-device-btn").addEventListener("click", async () => {
-      const newName = await openNameDialog(clientName);
-      if (newName && newName !== clientName) {
-        clientName = newName;
-        localStorage.setItem(NAME_KEY, clientName);
-        document.getElementById("my-device-name").textContent = clientName;
-        try {
-          rc.sendJson({ type: "rename", name: clientName });
-          log.info("Renamed device to", clientName);
-        } catch (err) {
-          log.error("Failed to send rename", err);
-          window.UI.toast("Could not update your name on the network - reconnect and try again.", "error");
+    document
+      .getElementById("my-device-btn")
+      .addEventListener("click", async () => {
+        const newName = await openNameDialog(clientName);
+        if (newName && newName !== clientName) {
+          clientName = newName;
+          localStorage.setItem(NAME_KEY, clientName);
+          document.getElementById("my-device-name").textContent = clientName;
+          try {
+            rc.sendJson({ type: "rename", name: clientName });
+            log.info("Renamed device to", clientName);
+          } catch (err) {
+            log.error("Failed to send rename", err);
+            window.UI.toast(
+              "Could not update your name on the network - reconnect and try again.",
+              "error",
+            );
+          }
         }
-      }
-    });
+      });
 
     const rc = new window.RelayClient();
     const tm = new window.TransferManager(rc);
@@ -131,9 +136,9 @@
 
     folderPicker.addEventListener("change", () => {
       if (!selfCanUpload) return;
-      
+
       if (!pendingTarget || folderPicker.files.length === 0) return;
-      
+
       const entries = window.FileWalker.fromFileList(folderPicker.files);
       tm.queueSend(pendingTarget.id, pendingTarget.name, entries);
       pendingTarget = null;
@@ -150,23 +155,37 @@
 
     tm.addEventListener("outgoing-changed", (e) => renderActive());
     tm.addEventListener("incoming-changed", (e) => {
-      window.UI.renderIncomingRequests(e.detail, (transferIds, accepted) => tm.respondToRequests(transferIds, accepted));
+      window.UI.renderIncomingRequests(e.detail, (transferIds, accepted) =>
+        tm.respondToRequests(transferIds, accepted),
+      );
       renderActive();
+      window.UI.renderReceivedFiles(tm);
     });
-    tm.addEventListener("received-updated", () => window.UI.renderReceivedFiles());
-    tm.addEventListener("toast", (e) => window.UI.toast(e.detail.message, e.detail.kind));
+    tm.addEventListener("received-updated", () =>
+      window.UI.renderReceivedFiles(tm),
+    );
+    tm.addEventListener("toast", (e) =>
+      window.UI.toast(e.detail.message, e.detail.kind),
+    );
 
     function renderActive() {
-      window.UI.renderActiveTransfers([...tm.outgoing.values()], [...tm.incoming.values()], (job) => {
-        if (job.direction === "outgoing") {
-          tm.cancelOutgoing(job.transferId);
-        } else {
-          tm.cancelIncoming(job.transferId, job.status === "pending-decision");
-        }
-      });
+      window.UI.renderActiveTransfers(
+        [...tm.outgoing.values()],
+        [...tm.incoming.values()],
+        (job) => {
+          if (job.direction === "outgoing") {
+            tm.cancelOutgoing(job.transferId);
+          } else {
+            tm.cancelIncoming(
+              job.transferId,
+              job.status === "pending-decision",
+            );
+          }
+        },
+      );
     }
 
-    window.UI.renderReceivedFiles();
+    window.UI.renderReceivedFiles(tm);
     rc.connect(clientId, clientName);
 
     window.addEventListener("beforeunload", () => {
