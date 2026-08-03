@@ -650,18 +650,18 @@
         const writable = await handle.createWritable();
         await zipResponse.body.pipeTo(writable);
       } else {
-        const blob = await zipResponse.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const { showSaveFilePicker } = await getFileSystemAdapter();
 
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
+        const fileHandle = await showSaveFilePicker({
+          suggestedName: filename,
+          types: [{
+            description: filename,
+            accept: { 'application/zip': ['.zip'] },
+          }],
+        });
 
-        a.click();
-        a.remove();
-
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        const writableStream = await fileHandle.createWritable();
+        await zipResponse.body.pipeTo(writableStream);
       }
 
       log.info(`Streamed ${entries.length} received file(s) into ZIP archive`);
@@ -702,6 +702,13 @@
       window.clientZip = await import("/lib/client-zip.min.js");
     }
     return window.clientZip;
+  }
+
+  async function getFileSystemAdapter() {
+    if (!window.fileSystemAdapter) {
+      window.fileSystemAdapter = await import("/lib/fs.min.js");
+    }
+    return window.fileSystemAdapter;
   }
 
   window.UI = {
