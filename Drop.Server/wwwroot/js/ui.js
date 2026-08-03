@@ -677,7 +677,7 @@
     clearAllBtn.hidden = shouldHideClearAll;
     clearAllBtn.style.display = shouldHideClearAll ? "none" : "";
 
-    const shouldHideDownloadAll = entries.length < 2;
+    const shouldHideDownloadAll = isSafari() || entries.length < 2;
     downloadAllBtn.hidden = shouldHideDownloadAll;
     downloadAllBtn.style.display = shouldHideDownloadAll ? "none" : "";
 
@@ -724,68 +724,12 @@
     };
 
     downloadAllBtn.onclick = async () => {
-      await downloadEntries(entries);
+      log.info(`Downloading all ${entries.length} received file(s)`);
+  
+      for (const entry of entries) {
+        await downloadEntry(entry);
+      }
     };
-  }
-
-  async function downloadEntries(entries) {
-    if (!Array.isArray(entries) || entries.length === 0) return;
-
-    const prepared = [];
-    for (const entry of entries) {
-      try {
-        const file = await window.OpfsStore.getFile(entry);
-        const fileName = entry.relativePath
-          ? entry.relativePath.split("/").pop()
-          : entry.name || "file";
-        prepared.push({ entry, file, fileName });
-      } catch (err) {
-        log.error(`Failed reading ${entry.relativePath} for download`, err);
-        toast(`Could not read ${entry.relativePath}: ${err.message}`, "error");
-      }
-    }
-
-    if (prepared.length === 0) return;
-
-    if (window.showSaveFilePicker) {
-      for (const { entry, file, fileName } of prepared) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: fileName,
-          });
-          const writable = await handle.createWritable();
-          await file.stream().pipeTo(writable);
-          log.info(`Successfully downloaded ${fileName}`);
-        } catch (err) {
-          if (err?.name === "AbortError") {
-            log.info(`Download canceled by user for ${entry.relativePath}`);
-            continue;
-          }
-          log.error(`Failed downloading ${entry.relativePath}`, err);
-          toast(
-            `Could not download ${entry.relativePath}: ${err.message}`,
-            "error",
-          );
-        }
-      }
-      return;
-    }
-
-    const urls = [];
-    for (const { fileName, file } of prepared) {
-      const url = URL.createObjectURL(file);
-      urls.push(url);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 10000);
-    log.info(`Triggered ${prepared.length} download(s)`);
   }
 
   async function downloadEntry(entry) {
@@ -810,6 +754,10 @@
         "error",
       );
     }
+  }
+
+  function isSafari() {
+    return /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
   }
 
   window.UI = {
