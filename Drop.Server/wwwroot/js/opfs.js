@@ -20,8 +20,6 @@
     return receivedRoot.getDirectoryHandle(String(transferId), { create: !!create });
   }
 
-  const TRANSFER_COMPLETE_MARKER = ".drop-transfer-complete";
-
   function markerNameFor(fileName) {
     return `.drop-complete-${encodeURIComponent(fileName)}`;
   }
@@ -61,17 +59,6 @@
     log.info(`Marked file complete ${relativePath} in transfer ${transferId}`);
   }
 
-  async function markTransferCompleted(transferId) {
-    const transferDir = await getTransferDir(transferId, true);
-    const marker = await transferDir.getFileHandle(TRANSFER_COMPLETE_MARKER, { create: true });
-    const writable = await marker.createWritable();
-
-    await writable.write(new TextEncoder().encode("complete"));
-    await writable.close();
-
-    log.info(`Marked transfer ${transferId} as complete`);
-  }
-
   async function listAllReceived() {
     const out = [];
 
@@ -86,11 +73,11 @@
 
     async function walkTransfer(transferDirHandle, transferId, prefix, dirHandle) {
       for await (const [name, handle] of dirHandle.entries()) {
-        if (name.startsWith(".drop-")) continue;
+        if (name.startsWith(".drop-complete-")) continue;
 
         if (handle.kind === "directory") {
           await walkTransfer(transferDirHandle, transferId, prefix ? `${prefix}/${name}` : name, handle);
-          continue;
+          return;
         }
         
         try {
@@ -127,15 +114,6 @@
     try {
       for await (const [transferId, transferDirHandle] of receivedRoot.entries()) {
         if (transferDirHandle.kind !== "directory") continue;
-
-        try {
-          await transferDirHandle.getFileHandle(TRANSFER_COMPLETE_MARKER, { create: false });
-        } catch (err) {
-          if (err.name === "NotFoundError") {
-            continue;
-          }
-          throw err;
-        }
         
         await walkTransfer(transferDirHandle, transferId, "", transferDirHandle);
       }
@@ -200,7 +178,6 @@
     checkSupport,
     openWritable,
     markFileCompleted,
-    markTransferCompleted,
     listAllReceived,
     deleteEntry,
     deleteTransfer,

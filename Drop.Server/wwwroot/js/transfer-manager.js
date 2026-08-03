@@ -515,12 +515,6 @@
       for (const writer of job.writers.values()) {
         await writer.chain;
       }
-
-      try {
-        await window.OpfsStore.markTransferCompleted(msg.transferId);
-      } catch (err) {
-        log.warn(`Failed marking transfer ${msg.transferId} complete in OPFS`, err);
-      }
       
       job.status = "done";
       job.currentFileIndex = -1;
