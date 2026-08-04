@@ -17,7 +17,7 @@ The app listens on **http://localhost:10010**.
 Requires the .NET 10 SDK.
 
 ```bash
-cd Server
+cd Drop.Server
 dotnet run
 ```
 
