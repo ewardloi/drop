@@ -24,7 +24,7 @@ async function resolveParentDir(transferId, relativePath, create) {
   return { dirHandle: dir, fileName };
 }
 
-async function handleOpenWrite({ transferId, relativePath }) {
+async function handleOpenWrite({ transferId, relativePath, size }) {
   const { dirHandle, fileName } = await resolveParentDir(
     transferId,
     relativePath,
@@ -35,7 +35,12 @@ async function handleOpenWrite({ transferId, relativePath }) {
   });
   const accessHandle = await fileHandle.createSyncAccessHandle();
 
-  accessHandle.truncate(0);
+  try {
+    accessHandle.truncate(Number.isFinite(size) && size > 0 ? size : 0);
+  } catch (err) {
+    accessHandle.close();
+    throw err;
+  }
 
   const handleId = nextHandleId++;
   openHandles.set(handleId, accessHandle);

@@ -104,7 +104,7 @@
     return { dirHandle: dir, fileName };
   }
 
-  async function openWritableLegacy(transferId, relativePath) {
+  async function openWritableLegacy(transferId, relativePath, size) {
     const { dirHandle, fileName } = await resolveParentDir(
       transferId,
       relativePath,
@@ -113,17 +113,29 @@
       create: true,
     });
 
-    return await fileHandle.createWritable();
+    const writable = await fileHandle.createWritable();
+
+    if (Number.isFinite(size) && size > 0) {
+      try {
+        await writable.truncate(size);
+      } catch (err) {
+        await writable.abort().catch(() => {});
+        throw err;
+      }
+    }
+
+    return writable;
   }
 
   async function getFileLegacy(entry) {
     return entry.handle.getFile();
   }
 
-  async function openWritableViaWorker(client, transferId, relativePath) {
+  async function openWritableViaWorker(client, transferId, relativePath, size) {
     const { handleId } = await client.call("open-write", {
       transferId,
       relativePath,
+      size,
     });
 
     let position = 0;
@@ -168,23 +180,29 @@
     });
   }
 
-  async function openWritable(transferId, relativePath) {
+  function isQuotaError(err) {
+    return !!err && (err.name === "QuotaExceededError" || err.code === 22);
+  }
+
+  async function openWritable(transferId, relativePath, size) {
     log.info(`Opening writable for transfer ${transferId} -> ${relativePath}`);
 
     const client = getWorker();
 
     if (!client) {
-      return openWritableLegacy(transferId, relativePath);
+      return openWritableLegacy(transferId, relativePath, size);
     }
 
     try {
-      return await openWritableViaWorker(client, transferId, relativePath);
+      return await openWritableViaWorker(client, transferId, relativePath, size);
     } catch (err) {
+      if (isQuotaError(err)) throw err;
+
       log.warn(
         `OPFS worker write failed, falling back to main-thread write for ${relativePath}`,
         err,
       );
-      return openWritableLegacy(transferId, relativePath);
+      return openWritableLegacy(transferId, relativePath, size);
     }
   }
 
@@ -369,6 +387,34 @@
     }
   }
 
+  async function ensurePersisted() {
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        const granted = await navigator.storage.persist();
+        log.info(`Persistent storage ${granted ? "granted" : "denied"}`);
+      }
+    } catch (err) {
+      log.warn("navigator.storage.persist() failed", err);
+    }
+  }
+
+  async function hasQuotaFor(bytesNeeded, safetyMarginRatio = 0.05) {
+    if (!navigator.storage || !navigator.storage.estimate) {
+      return { ok: true, unknown: true };
+    }
+
+    try {
+      const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+      const available = quota - usage;
+      const needed = bytesNeeded * (1 + safetyMarginRatio);
+
+      return { ok: available >= needed, available, quota, usage, unknown: false };
+    } catch (err) {
+      log.warn("navigator.storage.estimate() failed", err);
+      return { ok: true, unknown: true };
+    }
+  }
+
   window.OpfsStore = {
     checkSupport,
     openWritable,
@@ -378,5 +424,8 @@
     deleteTransfer,
     clearAllReceived,
     getFile,
+    ensurePersisted,
+    hasQuotaFor,
+    isQuotaError,
   };
 })();

@@ -9,15 +9,22 @@
     return crypto.randomUUID();
   }
 
-  async function withRetry(fn, { retries = 3, baseDelayMs = 200, label } = {}) {
+  async function withRetry(
+    fn,
+    { retries = 3, baseDelayMs = 200, label, retryable } = {},
+  ) {
     let lastErr;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         return await fn();
       } catch (err) {
         lastErr = err;
+
+        if (retryable && !retryable(err)) break;
         if (attempt === retries) break;
+        
         const delay = baseDelayMs * Math.pow(2, attempt);
+        
         if (label)
           log.warn(
             `${label} failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms`,
@@ -77,6 +84,8 @@
       this.outgoingBusy = false;
       this.incomingBusy = false;
       this._pendingResponses = new Map();
+
+      window.OpfsStore?.ensurePersisted?.();
 
       this.rc.addEventListener("message:transfer-request", (e) =>
         this._onIncomingRequest(e.detail),
@@ -476,9 +485,26 @@
       }
     }
 
-    respondToRequest(transferId, accepted) {
+    async respondToRequest(transferId, accepted) {
       const job = this.incoming.get(transferId);
       if (!job) return;
+
+      if (accepted && window.OpfsStore?.hasQuotaFor) {
+        const quota = await window.OpfsStore.hasQuotaFor(job.totalBytes);
+
+        if (!quota.ok) {
+          log.warn(
+            `Rejecting transfer ${transferId}: insufficient OPFS quota (need ~${job.totalBytes}, available ~${quota.available})`,
+          );
+          accepted = false;
+          job.status = "pending-decision";
+          this._toast(
+            `Not enough free storage to receive this transfer (${job.fromName}).`,
+            "error",
+          );
+        }
+      }
+
       job.decided = true;
       log.info(
         `User ${accepted ? "accepted" : "rejected"} transfer ${transferId} from ${job.fromName}`,
@@ -545,11 +571,16 @@
         try {
           writer.writable = await withRetry(
             () =>
-              window.OpfsStore.openWritable(msg.transferId, msg.relativePath),
+              window.OpfsStore.openWritable(
+                msg.transferId,
+                msg.relativePath,
+                msg.size,
+              ),
             {
               retries: 3,
               baseDelayMs: 200,
               label: `Opening OPFS writable for ${msg.relativePath}`,
+              retryable: (err) => !window.OpfsStore.isQuotaError(err),
             },
           );
           log.info(
@@ -621,6 +652,7 @@
               retries: 3,
               baseDelayMs: 200,
               label: `Writing to disk for transfer ${detail.transferId} file ${detail.fileIndex}`,
+              retryable: (err) => !window.OpfsStore.isQuotaError(err),
             });
             writer.written += payload.byteLength;
 
@@ -667,6 +699,7 @@
               retries: 3,
               baseDelayMs: 200,
               label: `Writing to disk for transfer ${msg.transferId} file ${msg.fileIndex}`,
+              retryable: (err) => !window.OpfsStore.isQuotaError(err),
             });
             writer.written += payload.byteLength;
             job.receivedBytes += payload.byteLength;
@@ -763,6 +796,15 @@
             .abort()
             .catch((e) => log.error("Failed aborting writable", e));
         }
+      }
+
+      if (wasActive) {
+        window.OpfsStore?.deleteTransfer?.(job.transferId).catch((e) =>
+          log.warn(
+            `Failed cleaning up OPFS data for aborted transfer ${job.transferId}`,
+            e,
+          ),
+        );
       }
 
       if (wasActive) this.incomingBusy = false;
