@@ -3,6 +3,69 @@
 
   const log = window.Log.opfs;
 
+  const SYNC_ACCESS_HANDLES_SUPPORTED =
+    typeof FileSystemFileHandle !== "undefined" &&
+    "createSyncAccessHandle" in FileSystemFileHandle.prototype;
+
+  let opfsWorker = null;
+  let workerInitFailed = false;
+
+  class OpfsWorkerClient {
+    constructor() {
+      this.worker = new Worker("js/opfs-worker.js");
+      this.nextId = 1;
+      this.pending = new Map();
+
+      this.worker.onmessage = (event) => {
+        const { id, ok, result, error } = event.data;
+        const pending = this.pending.get(id);
+
+        if (!pending) return;
+
+        this.pending.delete(id);
+
+        if (ok) pending.resolve(result);
+        else pending.reject(new Error(error));
+      };
+
+      this.worker.onerror = (event) => {
+        log.error("OPFS worker crashed", event.message || event);
+
+        for (const [id, pending] of this.pending) {
+          pending.reject(new Error("OPFS worker crashed"));
+          this.pending.delete(id);
+        }
+      };
+    }
+
+    call(type, payload, transfer) {
+      const id = this.nextId++;
+      return new Promise((resolve, reject) => {
+        this.pending.set(id, { resolve, reject });
+        this.worker.postMessage({ id, type, ...payload }, transfer || []);
+      });
+    }
+  }
+
+  function getWorker() {
+    if (!SYNC_ACCESS_HANDLES_SUPPORTED || workerInitFailed) return null;
+
+    if (!opfsWorker) {
+      try {
+        opfsWorker = new OpfsWorkerClient();
+      } catch (err) {
+        log.error(
+          "Failed starting OPFS worker, falling back to main-thread I/O",
+          err,
+        );
+        workerInitFailed = true;
+        return null;
+      }
+    }
+
+    return opfsWorker;
+  }
+
   function checkSupport() {
     if (!("storage" in navigator) || !("getDirectory" in navigator.storage)) {
       throw new Error(
@@ -41,9 +104,7 @@
     return { dirHandle: dir, fileName };
   }
 
-  async function openWritable(transferId, relativePath) {
-    log.info(`Opening writable for transfer ${transferId} -> ${relativePath}`);
-
+  async function openWritableLegacy(transferId, relativePath) {
     const { dirHandle, fileName } = await resolveParentDir(
       transferId,
       relativePath,
@@ -53,6 +114,96 @@
     });
 
     return await fileHandle.createWritable();
+  }
+
+  async function getFileLegacy(entry) {
+    return entry.handle.getFile();
+  }
+
+  async function openWritableViaWorker(client, transferId, relativePath) {
+    const { handleId } = await client.call("open-write", {
+      transferId,
+      relativePath,
+    });
+
+    let position = 0;
+    let closed = false;
+
+    return {
+      async write(payload) {
+        if (closed) throw new Error("Writable already closed");
+
+        const view =
+          payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+
+        const owned = view.slice();
+
+        await client.call(
+          "write-chunk",
+          { handleId, offset: position, buffer: owned.buffer },
+          [owned.buffer],
+        );
+
+        position += owned.byteLength;
+      },
+      async close() {
+        closed = true;
+        await client.call("close-write", { handleId });
+      },
+      async abort() {
+        closed = true;
+        await client.call("abort-write", { handleId }).catch(() => {});
+      },
+    };
+  }
+
+  async function getFileViaWorker(client, entry) {
+    const { buffer, name } = await client.call("read-file", {
+      transferId: entry.transferId,
+      relativePath: entry.relativePath,
+    });
+
+    return new File([buffer], name || entry.name, {
+      lastModified: entry.lastModified,
+    });
+  }
+
+  async function openWritable(transferId, relativePath) {
+    log.info(`Opening writable for transfer ${transferId} -> ${relativePath}`);
+
+    const client = getWorker();
+
+    if (!client) {
+      return openWritableLegacy(transferId, relativePath);
+    }
+
+    try {
+      return await openWritableViaWorker(client, transferId, relativePath);
+    } catch (err) {
+      log.warn(
+        `OPFS worker write failed, falling back to main-thread write for ${relativePath}`,
+        err,
+      );
+      return openWritableLegacy(transferId, relativePath);
+    }
+  }
+
+  async function getFile(entry) {
+    const client = getWorker();
+
+    if (!client) {
+      return getFileLegacy(entry);
+    }
+
+    try {
+      return await getFileViaWorker(client, entry);
+    } catch (err) {
+      log.warn(
+        `OPFS worker read failed, falling back to main-thread read for ${entry.relativePath}`,
+        err,
+      );
+      return getFileLegacy(entry);
+    }
   }
 
   async function markFileCompleted(transferId, relativePath) {
@@ -216,10 +367,6 @@
       log.error("Failed clearing OPFS received files", err);
       throw err;
     }
-  }
-
-  async function getFile(entry) {
-    return entry.handle.getFile();
   }
 
   window.OpfsStore = {

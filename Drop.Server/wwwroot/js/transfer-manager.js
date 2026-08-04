@@ -34,14 +34,36 @@
   }
 
   function updateTransferProgress(job) {
-    if (!job.startedAt) {
-      job.startedAt = Date.now();
-    }
-    const elapsedSeconds = Math.max((Date.now() - job.startedAt) / 1000, 0.25);
+    const now = Date.now();
     const doneBytes =
       job.direction === "outgoing" ? job.sentBytes : job.receivedBytes;
+
+    if (!job.startedAt) job.startedAt = now;
+
+    if (job.lastProgressAt == null) {
+      job.lastProgressAt = now;
+      job.lastProgressBytes = doneBytes;
+      job.speedBytesPerSecond = 0;
+      return;
+    }
+
+    const elapsedSinceLast = (now - job.lastProgressAt) / 1000;
+
+    if (elapsedSinceLast < 0.2) return;
+
+    const bytesSinceLast = doneBytes - job.lastProgressBytes;
+    const instantaneousSpeed = Math.max(bytesSinceLast, 0) / elapsedSinceLast;
+
+    const alpha = 0.3;
     job.speedBytesPerSecond =
-      doneBytes > 0 ? Math.round(doneBytes / elapsedSeconds) : 0;
+      job.speedBytesPerSecond > 0
+        ? Math.round(
+            alpha * instantaneousSpeed + (1 - alpha) * job.speedBytesPerSecond,
+          )
+        : Math.round(instantaneousSpeed);
+
+    job.lastProgressAt = now;
+    job.lastProgressBytes = doneBytes;
   }
 
   class TransferManager extends EventTarget {
@@ -75,6 +97,29 @@
         this._onTransferCompleteMsg(e.detail),
       );
       this.rc.addEventListener("chunk", (e) => this._onChunk(e.detail));
+      this.rc.addEventListener("disconnected", () => this._onDisconnected());
+    }
+
+    _onDisconnected() {
+      for (const job of this.outgoing.values()) {
+        if (job.status === "requesting") {
+          job.status = "error";
+          job.error = "Connection lost.";
+        }
+      }
+      for (const transferId of [...this._pendingResponses.keys()]) {
+        this._resolvePending(transferId, false);
+      }
+
+      for (const job of [...this.incoming.values()]) {
+        if (
+          ["pending-queue", "pending-decision", "receiving"].includes(
+            job.status,
+          )
+        ) {
+          this._abortIncoming(job, "Connection lost.");
+        }
+      }
     }
 
     _emitOutgoing() {
@@ -227,7 +272,9 @@
       });
 
       if (!accepted) {
-        if (job.status !== "canceled") job.status = "rejected";
+        if (job.status !== "canceled" && job.status !== "error") {
+          job.status = "rejected";
+        }
         log.info(`Transfer ${transferId} not accepted (status=${job.status})`);
 
         this._emitOutgoing();
@@ -436,7 +483,14 @@
       log.info(
         `User ${accepted ? "accepted" : "rejected"} transfer ${transferId} from ${job.fromName}`,
       );
-      this.rc.sendJson({ type: "transfer-response", transferId, accepted });
+
+      try {
+        this.rc.sendJson({ type: "transfer-response", transferId, accepted });
+      } catch (err) {
+        log.error("Failed to send transfer response", err);
+        this._abortIncoming(job, "Connection lost.");
+        return;
+      }
 
       if (!accepted) {
         job.status = "rejected";

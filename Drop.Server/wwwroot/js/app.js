@@ -4,6 +4,7 @@
   const log = window.Log.app;
   const ID_KEY = "drop.clientId";
   const NAME_KEY = "drop.clientName";
+  const SESSION_KEY = "drop.session";
 
   function getOrCreateClientId() {
     let id = localStorage.getItem(ID_KEY);
@@ -44,21 +45,17 @@
     });
   }
 
-  async function clearStorageOnExit() {
-    try {
-      if (!window.OpfsStore?.clearAllReceived) return;
-      await window.OpfsStore.clearAllReceived();
-    } catch (err) {
-      log.warn("Failed to clear OPFS on exit", err);
-    }
-  }
-
   async function main() {
     log.info("Starting Drop");
 
     try {
       window.OpfsStore.checkSupport();
-      await window.OpfsStore.clearAllReceived();
+      var session = sessionStorage.getItem(SESSION_KEY);
+
+      if (!session)
+        await window.OpfsStore.clearAllReceived();
+
+      sessionStorage.setItem(SESSION_KEY, session ?? crypto.randomUUID());
     } catch (err) {
       log.error("OPFS unsupported", err);
       window.UI.toast(err.message, "error");
@@ -187,13 +184,6 @@
 
     window.UI.renderReceivedFiles(tm);
     rc.connect(clientId, clientName);
-
-    window.addEventListener("beforeunload", () => {
-      clearStorageOnExit();
-    });
-    window.addEventListener("pagehide", () => {
-      clearStorageOnExit();
-    });
 
     log.info("Drop ready. clientId =", clientId, "name =", clientName);
   }

@@ -27,6 +27,29 @@
     return `${formatBytes(n)}/s`;
   }
 
+  function formatDuration(totalSeconds) {
+    if (!isFinite(totalSeconds) || totalSeconds < 0) return "";
+    const s = Math.round(totalSeconds);
+    if (s < 1) return "<1s";
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const remS = s % 60;
+    if (m < 60) return remS > 0 ? `${m}m ${remS}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
+  }
+
+  function etaText(job, doneBytes) {
+    if (!["sending", "receiving"].includes(job.status)) return "";
+    if (!(job.speedBytesPerSecond > 0)) return "";
+
+    const remainingBytes = job.totalBytes - doneBytes;
+    if (remainingBytes <= 0) return "";
+
+    return `${formatDuration(remainingBytes / job.speedBytesPerSecond)} left`;
+  }
+
   function el(html) {
     const t = document.createElement("template");
     t.innerHTML = html.trim();
@@ -443,6 +466,7 @@
 
     const subtitle = [
       speedText,
+      etaText(job, doneBytes),
       `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
     ]
       .filter(Boolean)
@@ -495,6 +519,7 @@
 
     const subtitle = [
       speedText,
+      etaText(job, doneBytes),
       `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
     ]
       .filter(Boolean)
