@@ -13,6 +13,7 @@
     file: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     folder: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     doc: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+    clock: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3.2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   };
 
   function formatBytes(n) {
@@ -54,6 +55,20 @@
     const t = document.createElement("template");
     t.innerHTML = html.trim();
     return t.content.firstElementChild;
+  }
+
+  function transferMetaParts(job, isOut) {
+    const isActive = ["sending", "receiving"].includes(job.status);
+    const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
+
+    const speedText =
+      isActive && job.speedBytesPerSecond > 0
+        ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
+        : "";
+    const etaValue = isActive ? etaText(job, doneBytes) : "";
+    const sizeText = `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`;
+
+    return { isActive, doneBytes, speedText, etaValue, sizeText };
   }
 
   const THEME_KEY = "drop.theme";
@@ -441,7 +456,8 @@
     const isOut = job.direction === "outgoing";
 
     const peerName = isOut ? job.targetName : job.fromName;
-    const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
+    const { doneBytes, isActive, speedText, etaValue, sizeText } =
+      transferMetaParts(job, isOut);
     const pct =
       job.totalBytes > 0
         ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100))
@@ -458,19 +474,6 @@
     const canCancel = ["queued", "requesting", "sending", "receiving"].includes(
       job.status,
     );
-    const speedText =
-      ["sending", "receiving"].includes(job.status) &&
-      job.speedBytesPerSecond > 0
-        ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
-        : "";
-
-    const subtitle = [
-      speedText,
-      etaText(job, doneBytes),
-      `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
-    ]
-      .filter(Boolean)
-      .join(" • ");
 
     const card = el(`
       <div class="card" data-transfer-id="${job.transferId}">
@@ -478,8 +481,16 @@
           <div class="card-icon">${isOut ? ICON.download : ICON.folder}</div>
           <div class="card-main">
             <div class="card-title" title="${escapeHtml(currentFileTitle)}">${escapeHtml(currentFileTitle)}</div>
-            <div class="card-sub">${subtitle}${job.error ? ` &middot; ${escapeHtml(job.error)}` : ""}</div>
+            ${
+              isActive
+                ? `<div class="card-meta">
+                    <span class="card-meta-speed">${escapeHtml(speedText) || "&nbsp;"}</span>
+                    <span class="card-meta-eta">${ICON.clock}<span>${escapeHtml(etaValue) || "&nbsp;"}</span></span>
+                  </div>`
+                : ""
+            }
           </div>
+          <span class="card-size">${escapeHtml(sizeText)}</span>
           <span class="status-tag ${statusClass(job.status)}">${statusLabel(job.status)}</span>
           ${canCancel ? `<button class="btn-ghost icon-only cancel-btn" title="Cancel">${ICON.stop}</button>` : ""}
         </div>
@@ -494,7 +505,8 @@
   function updateActiveTransferCard(card, job, onCancel) {
     const isOut = job.direction === "outgoing";
     const peerName = isOut ? job.targetName : job.fromName;
-    const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
+    const { doneBytes, isActive, speedText, etaValue, sizeText } =
+      transferMetaParts(job, isOut);
     const pct =
       job.totalBytes > 0
         ? Math.min(100, Math.round((doneBytes / job.totalBytes) * 100))
@@ -511,29 +523,37 @@
     const canCancel = ["queued", "requesting", "sending", "receiving"].includes(
       job.status,
     );
-    const speedText =
-      ["sending", "receiving"].includes(job.status) &&
-      job.speedBytesPerSecond > 0
-        ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
-        : "";
-
-    const subtitle = [
-      speedText,
-      etaText(job, doneBytes),
-      `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`,
-    ]
-      .filter(Boolean)
-      .join(" • ");
 
     const titleEl = card.querySelector(".card-title");
-    const subEl = card.querySelector(".card-sub");
+    const cardMain = card.querySelector(".card-main");
+    let metaEl = card.querySelector(".card-meta");
+    const sizeEl = card.querySelector(".card-size");
     const statusTag = card.querySelector(".status-tag");
     const progressFill = card.querySelector(".progress-fill");
     const cancelBtn = card.querySelector(".cancel-btn");
 
     titleEl.textContent = currentFileTitle;
     titleEl.title = currentFileTitle;
-    subEl.textContent = `${subtitle}${job.error ? ` · ${job.error}` : ""}`;
+
+    if (isActive) {
+      if (!metaEl) {
+        metaEl = el(`
+          <div class="card-meta">
+            <span class="card-meta-speed">&nbsp;</span>
+            <span class="card-meta-eta">${ICON.clock}<span>&nbsp;</span></span>
+          </div>
+        `);
+        titleEl.insertAdjacentElement("afterend", metaEl);
+      }
+      metaEl.querySelector(".card-meta-speed").innerHTML =
+        escapeHtml(speedText) || "&nbsp;";
+      metaEl.querySelector(".card-meta-eta span").innerHTML =
+        escapeHtml(etaValue) || "&nbsp;";
+    } else if (metaEl) {
+      metaEl.remove();
+    }
+
+    sizeEl.textContent = sizeText;
     statusTag.className = `status-tag ${statusClass(job.status)}`;
     statusTag.textContent = statusLabel(job.status);
     progressFill.style.width = `${pct}%`;

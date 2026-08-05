@@ -123,29 +123,33 @@ const handlers = {
   "read-file": handleReadFile,
 };
 
-self.onmessage = async (event) => {
+let queue = Promise.resolve();
+
+self.onmessage = (event) => {
   const { id, type, ...payload } = event.data;
   const handler = handlers[type];
 
-  if (!handler) {
-    self.postMessage({
-      id,
-      ok: false,
-      error: `Unknown OPFS worker command: ${type}`,
-    });
-    return;
-  }
+  queue = queue.then(async () => {
+    if (!handler) {
+      self.postMessage({
+        id,
+        ok: false,
+        error: `Unknown OPFS worker command: ${type}`,
+      });
+      return;
+    }
 
-  try {
-    const result = await handler(payload);
-    const transferables =
-      result && result.buffer instanceof ArrayBuffer ? [result.buffer] : [];
-    self.postMessage({ id, ok: true, result }, transferables);
-  } catch (err) {
-    self.postMessage({
-      id,
-      ok: false,
-      error: err && err.message ? err.message : String(err),
-    });
-  }
+    try {
+      const result = await handler(payload);
+      const transferables =
+        result && result.buffer instanceof ArrayBuffer ? [result.buffer] : [];
+      self.postMessage({ id, ok: true, result }, transferables);
+    } catch (err) {
+      self.postMessage({
+        id,
+        ok: false,
+        error: err && err.message ? err.message : String(err),
+      });
+    }
+  });
 };

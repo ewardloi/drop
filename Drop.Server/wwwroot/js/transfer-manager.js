@@ -107,6 +107,42 @@
       );
       this.rc.addEventListener("chunk", (e) => this._onChunk(e.detail));
       this.rc.addEventListener("disconnected", () => this._onDisconnected());
+
+      this._progressTickTimer = setInterval(() => this._tickStaleProgress(), 1000);
+    }
+
+    _tickStaleProgress() {
+      const STALL_MS = 1500;
+      const now = Date.now();
+      let outgoingChanged = false;
+      let incomingChanged = false;
+
+      for (const job of this.outgoing.values()) {
+        if (job.status !== "sending") continue;
+        if (
+          job.speedBytesPerSecond > 0 &&
+          job.lastProgressAt != null &&
+          now - job.lastProgressAt > STALL_MS
+        ) {
+          job.speedBytesPerSecond = 0;
+          outgoingChanged = true;
+        }
+      }
+
+      for (const job of this.incoming.values()) {
+        if (job.status !== "receiving") continue;
+        if (
+          job.speedBytesPerSecond > 0 &&
+          job.lastProgressAt != null &&
+          now - job.lastProgressAt > STALL_MS
+        ) {
+          job.speedBytesPerSecond = 0;
+          incomingChanged = true;
+        }
+      }
+
+      if (outgoingChanged) this._emitOutgoing();
+      if (incomingChanged) this._emitIncoming();
     }
 
     _onDisconnected() {
@@ -436,6 +472,7 @@
         currentFileIndex: -1,
         completedFileIndices: new Set(),
         writers: new Map(),
+        orphanChunks: new Map(),
         decided: false,
         startedAt: null,
         speedBytesPerSecond: 0,
@@ -567,6 +604,30 @@
 
       job.writers.set(msg.fileIndex, writer);
 
+      const orphans = job.orphanChunks.get(msg.fileIndex);
+
+      if (orphans && orphans.size > 0) {
+        log.warn(
+          `Recovering ${orphans.size} chunk(s) that arrived before file-start for ` +
+            `"${msg.relativePath}" (transfer ${msg.transferId}, file ${msg.fileIndex})`,
+        );
+
+        job.orphanChunks.delete(msg.fileIndex);
+
+        const sortedOffsets = [...orphans.keys()].sort((a, b) => a - b);
+
+        for (const offset of sortedOffsets) {
+          this._enqueueChunk(
+            job,
+            writer,
+            msg.transferId,
+            msg.fileIndex,
+            offset,
+            orphans.get(offset),
+          );
+        }
+      }
+
       writer.ready = (async () => {
         try {
           writer.writable = await withRetry(
@@ -600,19 +661,12 @@
       })();
     }
 
+    static MAX_ORPHAN_CHUNKS_PER_FILE = 256;
+
     _onChunk(detail) {
       const job = this.incoming.get(detail.transferId);
 
       if (!job || job.status !== "receiving") return;
-
-      const writer = job.writers.get(detail.fileIndex);
-
-      if (!writer) {
-        log.warn(
-          `Chunk for unknown file index ${detail.fileIndex} in transfer ${detail.transferId}`,
-        );
-        return;
-      }
 
       const chunk =
         detail.payload instanceof Uint8Array
@@ -623,6 +677,45 @@
               detail.payload.byteLength,
             );
 
+      const writer = job.writers.get(detail.fileIndex);
+
+      if (!writer) {
+        let orphans = job.orphanChunks.get(detail.fileIndex);
+
+        if (!orphans) {
+          orphans = new Map();
+          job.orphanChunks.set(detail.fileIndex, orphans);
+        }
+
+        if (orphans.size >= TransferManager.MAX_ORPHAN_CHUNKS_PER_FILE) {
+          log.error(
+            `Dropping chunk for transfer ${detail.transferId} file ${detail.fileIndex} ` +
+              `at offset ${detail.offset}: too many chunks (${orphans.size}) buffered ` +
+              `ahead of file-start`,
+          );
+          return;
+        }
+
+        log.warn(
+          `Chunk for transfer ${detail.transferId} file ${detail.fileIndex} at offset ` +
+            `${detail.offset} arrived before file-start; buffering (${orphans.size + 1} pending)`,
+        );
+
+        orphans.set(detail.offset, chunk);
+        return;
+      }
+
+      this._enqueueChunk(
+        job,
+        writer,
+        detail.transferId,
+        detail.fileIndex,
+        detail.offset,
+        chunk,
+      );
+    }
+
+    _enqueueChunk(job, writer, transferId, fileIndex, offset, chunk) {
       writer.chain = writer.chain.then(async () => {
         try {
           await writer.ready;
@@ -630,14 +723,14 @@
             throw new Error("Writable not ready");
           }
 
-          if (detail.offset < writer.written) {
+          if (offset < writer.written) {
             log.debug(
-              `Ignoring duplicate or stale chunk for transfer ${detail.transferId} file ${detail.fileIndex} at offset ${detail.offset}`,
+              `Ignoring duplicate or stale chunk for transfer ${transferId} file ${fileIndex} at offset ${offset}`,
             );
             return;
           }
 
-          writer.pendingChunks.set(detail.offset, chunk);
+          writer.pendingChunks.set(offset, chunk);
 
           while (writer.pendingChunks.has(writer.written)) {
             const payload = writer.pendingChunks.get(writer.written);
@@ -651,7 +744,7 @@
             await withRetry(() => writer.writable.write(payload), {
               retries: 3,
               baseDelayMs: 200,
-              label: `Writing to disk for transfer ${detail.transferId} file ${detail.fileIndex}`,
+              label: `Writing to disk for transfer ${transferId} file ${fileIndex}`,
               retryable: (err) => !window.OpfsStore.isQuotaError(err),
             });
             writer.written += payload.byteLength;
@@ -664,7 +757,7 @@
           }
         } catch (err) {
           log.error(
-            `Write failed for transfer ${detail.transferId} file ${detail.fileIndex}`,
+            `Write failed for transfer ${transferId} file ${fileIndex}`,
             err,
           );
           this._abortIncoming(job, `Failed writing to disk: ${err.message}`);
@@ -708,8 +801,14 @@
           }
 
           if (writer.pendingChunks.size > 0) {
+            const gotOffsets = [...writer.pendingChunks.keys()].sort(
+              (a, b) => a - b,
+            );
             throw new Error(
-              `Missing chunk(s) before file close; next expected offset ${writer.written}`,
+              `Missing chunk(s) before file close; next expected offset ${writer.written}, ` +
+                `but have ${writer.pendingChunks.size} buffered chunk(s) starting at ` +
+                `[${gotOffsets.slice(0, 5).join(", ")}${gotOffsets.length > 5 ? ", ..." : ""}] ` +
+                `(written so far: ${writer.written} bytes)`,
             );
           }
 
@@ -797,6 +896,8 @@
             .catch((e) => log.error("Failed aborting writable", e));
         }
       }
+
+      job.orphanChunks.clear();
 
       if (wasActive) {
         window.OpfsStore?.deleteTransfer?.(job.transferId).catch((e) =>
