@@ -491,9 +491,13 @@
         })),
       });
 
-      const accepted = await new Promise((resolve) => {
+      const response = await new Promise((resolve) => {
         this._pendingResponses.set(transferId, resolve);
       });
+
+      const accepted =
+        response === true || (response && response.accepted === true);
+      const remoteWantsWebrtc = !!(response && response.webrtcEnabled);
 
       if (!accepted) {
         if (job.status !== "canceled" && job.status !== "error") {
@@ -517,9 +521,13 @@
         log.info(
           `Transfer ${transferId} is going to a remote peer, skipping WebRTC and using the relay`,
         );
+      } else if (this.webrtcEnabled && !remoteWantsWebrtc) {
+        log.info(
+          `Transfer ${transferId}: receiver has WebRTC off, using the relay`,
+        );
       }
 
-      if (this.webrtcEnabled && !job.forceRelay) {
+      if (this.webrtcEnabled && !job.forceRelay && remoteWantsWebrtc) {
         const webrtcTransport = new WebRtcTransport(this.rc, transferId);
         this._wireDataListeners(webrtcTransport);
 
@@ -691,8 +699,13 @@
     }
 
     _onTransferResponse(msg) {
-      log.info(`Response for ${msg.transferId}: accepted=${msg.accepted}`);
-      this._resolvePending(msg.transferId, !!msg.accepted);
+      log.info(
+        `Response for ${msg.transferId}: accepted=${msg.accepted} webrtcEnabled=${!!msg.webrtcEnabled}`,
+      );
+      this._resolvePending(msg.transferId, {
+        accepted: !!msg.accepted,
+        webrtcEnabled: !!msg.webrtcEnabled,
+      });
     }
 
     _onTransferCancel(msg) {
@@ -830,7 +843,12 @@
       }
 
       try {
-        this.rc.sendJson({ type: "transfer-response", transferId, accepted });
+        this.rc.sendJson({
+          type: "transfer-response",
+          transferId,
+          accepted,
+          webrtcEnabled: this.webrtcEnabled,
+        });
       } catch (err) {
         log.error("Failed to send transfer response", err);
         this._abortIncoming(job, "Connection lost.");
@@ -962,7 +980,7 @@
       })();
     }
 
-    static MAX_ORPHAN_CHUNKS_PER_FILE = 64;
+    static MAX_ORPHAN_CHUNKS_PER_FILE = 1024;
 
     _onChunk(detail, transport) {
       const job = this.incoming.get(detail.transferId);

@@ -102,7 +102,7 @@
     });
   }
 
-  const TRANSPORT_KEY = "drop.transportMode"; // "relay" | "webrtc"
+  const TRANSPORT_KEY = "drop.transportMode";
 
   function applyTransportMode(mode, tm) {
     document.getElementById("transport-icon-relay").style.display =
@@ -213,6 +213,7 @@
     });
 
     for (const btn of panel.querySelectorAll("button")) {
+      if (btn.id === "theme-toggle") continue;
       btn.addEventListener("click", () => closePanel());
     }
 
