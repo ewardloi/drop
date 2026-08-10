@@ -3,12 +3,7 @@
 
   const log = window.Log.opfs;
 
-  const SYNC_ACCESS_HANDLES_SUPPORTED =
-    typeof FileSystemFileHandle !== "undefined" &&
-    "createSyncAccessHandle" in FileSystemFileHandle.prototype;
-
   let opfsWorker = null;
-  let workerInitFailed = false;
 
   class OpfsWorkerClient {
     constructor() {
@@ -48,19 +43,8 @@
   }
 
   function getWorker() {
-    if (!SYNC_ACCESS_HANDLES_SUPPORTED || workerInitFailed) return null;
-
     if (!opfsWorker) {
-      try {
-        opfsWorker = new OpfsWorkerClient();
-      } catch (err) {
-        log.error(
-          "Failed starting OPFS worker, falling back to main-thread I/O",
-          err,
-        );
-        workerInitFailed = true;
-        return null;
-      }
+      opfsWorker = new OpfsWorkerClient();
     }
 
     return opfsWorker;
@@ -104,33 +88,6 @@
     return { dirHandle: dir, fileName };
   }
 
-  async function openWritableLegacy(transferId, relativePath, size) {
-    const { dirHandle, fileName } = await resolveParentDir(
-      transferId,
-      relativePath,
-    );
-    const fileHandle = await dirHandle.getFileHandle(fileName, {
-      create: true,
-    });
-
-    const writable = await fileHandle.createWritable();
-
-    if (Number.isFinite(size) && size > 0) {
-      try {
-        await writable.truncate(size);
-      } catch (err) {
-        await writable.abort().catch(() => {});
-        throw err;
-      }
-    }
-
-    return writable;
-  }
-
-  async function getFileLegacy(entry) {
-    return entry.handle.getFile();
-  }
-
   async function openWritableViaWorker(client, transferId, relativePath, size) {
     const { handleId } = await client.call("open-write", {
       transferId,
@@ -149,14 +106,21 @@
           payload instanceof Uint8Array ? payload : new Uint8Array(payload);
 
         const owned = view.slice();
+        const expectedLen = owned.byteLength;
 
-        await client.call(
+        const result = await client.call(
           "write-chunk",
           { handleId, offset: position, buffer: owned.buffer },
           [owned.buffer],
         );
 
-        position += owned.byteLength;
+        if (result?.written !== expectedLen) {
+          throw new Error(
+            `OPFS write incomplete at offset ${position}: expected ${expectedLen} bytes, worker reported ${result?.written}`,
+          );
+        }
+
+        position += expectedLen;
       },
       async close() {
         closed = true;
@@ -175,7 +139,20 @@
       relativePath: entry.relativePath,
     });
 
-    return new File([buffer], name || entry.name, {
+    const PART_SIZE = 512 * 1024 * 1024;
+    const parts = [];
+
+    for (let offset = 0; offset < buffer.byteLength; offset += PART_SIZE) {
+      parts.push(
+        new Uint8Array(
+          buffer,
+          offset,
+          Math.min(PART_SIZE, buffer.byteLength - offset),
+        ),
+      );
+    }
+
+    return new File(parts, name || entry.name, {
       lastModified: entry.lastModified,
     });
   }
@@ -189,39 +166,13 @@
 
     const client = getWorker();
 
-    if (!client) {
-      return openWritableLegacy(transferId, relativePath, size);
-    }
-
-    try {
-      return await openWritableViaWorker(client, transferId, relativePath, size);
-    } catch (err) {
-      if (isQuotaError(err)) throw err;
-
-      log.warn(
-        `OPFS worker write failed, falling back to main-thread write for ${relativePath}`,
-        err,
-      );
-      return openWritableLegacy(transferId, relativePath, size);
-    }
+    return openWritableViaWorker(client, transferId, relativePath, size);
   }
 
   async function getFile(entry) {
     const client = getWorker();
 
-    if (!client) {
-      return getFileLegacy(entry);
-    }
-
-    try {
-      return await getFileViaWorker(client, entry);
-    } catch (err) {
-      log.warn(
-        `OPFS worker read failed, falling back to main-thread read for ${entry.relativePath}`,
-        err,
-      );
-      return getFileLegacy(entry);
-    }
+    return getFileViaWorker(client, entry);
   }
 
   async function markFileCompleted(transferId, relativePath) {

@@ -55,8 +55,25 @@ function handleWriteChunk({ handleId, offset, buffer }) {
   }
 
   const view = new Uint8Array(buffer);
-  const written = accessHandle.write(view, { at: offset });
-  return { written };
+  let totalWritten = 0;
+
+  while (totalWritten < view.byteLength) {
+    const remaining = view.subarray(totalWritten);
+    const written = accessHandle.write(remaining, {
+      at: offset + totalWritten,
+    });
+
+    if (!(written > 0)) {
+      throw new Error(
+        `OPFS write stalled: wrote 0 of ${remaining.byteLength} remaining byte(s) ` +
+          `at offset ${offset + totalWritten}`,
+      );
+    }
+
+    totalWritten += written;
+  }
+
+  return { written: totalWritten };
 }
 
 function handleCloseWrite({ handleId }) {
@@ -106,8 +123,34 @@ async function handleReadFile({ transferId, relativePath }) {
   try {
     const size = accessHandle.getSize();
     const buffer = new ArrayBuffer(size);
+    const view = new Uint8Array(buffer);
 
-    accessHandle.read(new Uint8Array(buffer), { at: 0 });
+    const READ_CHUNK_SIZE = 512 * 1024 * 1024;
+    let offset = 0;
+
+    while (offset < size) {
+      const end = Math.min(offset + READ_CHUNK_SIZE, size);
+      const slice = view.subarray(offset, end);
+      let readInSlice = 0;
+
+      while (readInSlice < slice.byteLength) {
+        const remaining = slice.subarray(readInSlice);
+        const got = accessHandle.read(remaining, {
+          at: offset + readInSlice,
+        });
+
+        if (!(got > 0)) {
+          throw new Error(
+            `OPFS read stalled: read 0 of ${remaining.byteLength} remaining byte(s) ` +
+              `at offset ${offset + readInSlice}`,
+          );
+        }
+
+        readInSlice += got;
+      }
+
+      offset = end;
+    }
 
     return { buffer, size, name: fileName };
   } finally {

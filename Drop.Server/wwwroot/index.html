@@ -115,99 +115,310 @@
       </div>
 
       <div class="topbar-right">
-        <button
-          id="theme-toggle"
-          class="icon-btn"
-          type="button"
-          title="Change theme"
-          aria-label="Change theme"
-        >
-          <svg
-            id="theme-icon-light"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
+        <div class="dropdown" id="transport-dropdown">
+          <button
+            id="transport-toggle"
+            class="icon-btn"
+            type="button"
+            title="Change how transfers connect"
+            aria-haspopup="true"
+            aria-expanded="false"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="4.2"
-              stroke="currentColor"
-              stroke-width="1.6"
-            />
-            <path
-              d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-            />
-          </svg>
-          <svg
-            id="theme-icon-dark"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            style="display: none"
+            <svg
+              id="transport-icon-relay"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="6"
+                rx="1.5"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <rect
+                x="3"
+                y="14"
+                width="18"
+                height="6"
+                rx="1.5"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <circle cx="7" cy="7" r="0.9" fill="currentColor" />
+              <circle cx="7" cy="17" r="0.9" fill="currentColor" />
+            </svg>
+            <svg
+              id="transport-icon-p2p"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              style="display: none"
+            >
+              <circle
+                cx="5.5"
+                cy="12"
+                r="2.6"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <circle
+                cx="18.5"
+                cy="12"
+                r="2.6"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <path
+                d="M8.1 12h7.8"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span id="transport-label" class="icon-btn-label">Relay</span>
+            <svg
+              class="dropdown-caret"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+
+          <div class="dropdown-menu" id="transport-menu" hidden>
+            <button
+              type="button"
+              class="dropdown-item"
+              data-transport-mode="webrtc"
+            >
+              <span class="dropdown-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <circle
+                    cx="5.5"
+                    cy="12"
+                    r="2.6"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  />
+                  <circle
+                    cx="18.5"
+                    cy="12"
+                    r="2.6"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  />
+                  <path
+                    d="M8.1 12h7.8"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </span>
+              <span class="dropdown-item-text">
+                <span class="dropdown-item-title">Direct (P2P)</span>
+                <span class="dropdown-item-desc"
+                  >Faster - connects devices directly when possible</span
+                >
+              </span>
+              <svg
+                class="dropdown-item-check"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12.5l4.5 4.5L19 7"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="dropdown-item"
+              data-transport-mode="relay"
+            >
+              <span class="dropdown-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect
+                    x="3"
+                    y="4"
+                    width="18"
+                    height="6"
+                    rx="1.5"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  />
+                  <rect
+                    x="3"
+                    y="14"
+                    width="18"
+                    height="6"
+                    rx="1.5"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  />
+                  <circle cx="7" cy="7" r="0.9" fill="currentColor" />
+                  <circle cx="7" cy="17" r="0.9" fill="currentColor" />
+                </svg>
+              </span>
+              <span class="dropdown-item-text">
+                <span class="dropdown-item-title">Relay</span>
+                <span class="dropdown-item-desc"
+                  >Always works - routed through the server</span
+                >
+              </span>
+              <svg
+                class="dropdown-item-check"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M5 12.5l4.5 4.5L19 7"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="topbar-secondary" id="topbar-secondary">
+          <button
+            id="theme-toggle"
+            class="icon-btn"
+            type="button"
+            title="Change theme"
+            aria-label="Change theme"
           >
-            <path
-              d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <svg
-            id="theme-icon-auto"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            style="display: none"
+            <svg
+              id="theme-icon-light"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="4.2"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <path
+                d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+            <svg
+              id="theme-icon-dark"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              style="display: none"
+            >
+              <path
+                d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <svg
+              id="theme-icon-auto"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              style="display: none"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" />
+            </svg>
+            <span id="theme-label" class="icon-btn-label">Auto</span>
+          </button>
+
+          <button
+            id="my-device-btn"
+            class="device-chip"
+            type="button"
+            title="Edit this device's name"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="9"
-              stroke="currentColor"
-              stroke-width="1.6"
-            />
-            <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" />
-          </svg>
-          <span id="theme-label" class="icon-btn-label">Auto</span>
-        </button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="13"
+                rx="2"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <path
+                d="M8 21h8M12 17v4"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span id="my-device-name">This device</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4 20l1-4L17 4l3 3L8 19l-4 1Z"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
 
         <button
-          id="my-device-btn"
-          class="device-chip"
+          id="nav-toggle"
+          class="nav-toggle-btn"
           type="button"
-          title="Edit this device's name"
+          aria-label="Menu"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-controls="topbar-secondary"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <rect
-              x="3"
-              y="4"
-              width="18"
-              height="13"
-              rx="2"
-              stroke="currentColor"
-              stroke-width="1.6"
-            />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path
-              d="M8 21h8M12 17v4"
+              d="M4 6h16M4 12h16M4 18h16"
               stroke="currentColor"
-              stroke-width="1.6"
+              stroke-width="1.8"
               stroke-linecap="round"
-            />
-          </svg>
-          <span id="my-device-name">This device</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4 20l1-4L17 4l3 3L8 19l-4 1Z"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linejoin="round"
             />
           </svg>
         </button>
@@ -336,6 +547,7 @@
     <script src="js/opfs.js"></script>
     <script src="js/file-walker.js"></script>
     <script src="js/ws-client.js"></script>
+    <script src="js/webrtc-transport.js"></script>
     <script src="js/transfer-manager.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/app.js"></script>

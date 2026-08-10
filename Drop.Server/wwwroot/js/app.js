@@ -99,14 +99,21 @@
     const rc = new window.RelayClient();
     const tm = new window.TransferManager(rc);
 
+    window.UI.initTransportToggle(tm);
+    window.UI.initNavMenu();
+
     let pendingTarget = null;
     const filePicker = document.getElementById("file-picker");
     const folderPicker = document.getElementById("folder-picker");
     let selfCanUpload = true;
 
+    function isRemotePeer(peer) {
+      return !((peer.canUpload !== false) && selfCanUpload);
+    }
+
     function onPick(peer, mode, entries) {
       if (entries) {
-        tm.queueSend(peer.id, peer.name, entries);
+        tm.queueSend(peer.id, peer.name, entries, isRemotePeer(peer));
         return;
       }
 
@@ -127,7 +134,12 @@
       if (!pendingTarget || filePicker.files.length === 0) return;
 
       const entries = window.FileWalker.fromFileList(filePicker.files);
-      tm.queueSend(pendingTarget.id, pendingTarget.name, entries);
+      tm.queueSend(
+        pendingTarget.id,
+        pendingTarget.name,
+        entries,
+        isRemotePeer(pendingTarget),
+      );
       pendingTarget = null;
     });
 
@@ -137,7 +149,12 @@
       if (!pendingTarget || folderPicker.files.length === 0) return;
 
       const entries = window.FileWalker.fromFileList(folderPicker.files);
-      tm.queueSend(pendingTarget.id, pendingTarget.name, entries);
+      tm.queueSend(
+        pendingTarget.id,
+        pendingTarget.name,
+        entries,
+        isRemotePeer(pendingTarget),
+      );
       pendingTarget = null;
     });
 

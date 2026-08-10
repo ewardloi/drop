@@ -2,8 +2,8 @@
   "use strict";
 
   const log = window.Log.transfer;
-  const CHUNK_SIZE = 256 * 1024; // 256 KB
-  const BACKPRESSURE_THRESHOLD = 4 * 1024 * 1024; // 4 MB buffered before pausing sends
+  const CHUNK_SIZE = 256 * 1024;
+  const BACKPRESSURE_THRESHOLD = 4 * 1024 * 1024;
 
   function newId() {
     return crypto.randomUUID();
@@ -76,7 +76,10 @@
   class TransferManager extends EventTarget {
     constructor(relayClient) {
       super();
+
       this.rc = relayClient;
+      
+      this.webrtcEnabled = false;
       this.outgoing = new Map();
       this.incoming = new Map();
       this.outgoingQueue = [];
@@ -84,6 +87,7 @@
       this.outgoingBusy = false;
       this.incomingBusy = false;
       this._pendingResponses = new Map();
+      this._pendingFileAcks = new Map();
 
       window.OpfsStore?.ensurePersisted?.();
 
@@ -96,19 +100,62 @@
       this.rc.addEventListener("message:transfer-cancel", (e) =>
         this._onTransferCancel(e.detail),
       );
-      this.rc.addEventListener("message:file-start", (e) =>
-        this._onFileStart(e.detail),
-      );
-      this.rc.addEventListener("message:file-end", (e) =>
-        this._onFileEnd(e.detail),
-      );
       this.rc.addEventListener("message:transfer-complete", (e) =>
         this._onTransferCompleteMsg(e.detail),
       );
-      this.rc.addEventListener("chunk", (e) => this._onChunk(e.detail));
       this.rc.addEventListener("disconnected", () => this._onDisconnected());
 
+      this._wireDataListeners(this.rc);
+
       this._progressTickTimer = setInterval(() => this._tickStaleProgress(), 1000);
+    }
+
+    _wireDataListeners(transport) {
+      transport.addEventListener("message:file-start", (e) =>
+        this._onFileStart(e.detail, transport),
+      );
+      transport.addEventListener("message:file-end", (e) =>
+        this._onFileEnd(e.detail, transport),
+      );
+      transport.addEventListener("message:file-ack", (e) =>
+        this._onFileAck(e.detail, transport),
+      );
+      transport.addEventListener("message:resend-chunk", (e) =>
+        this._onResendChunkRequest(e.detail, transport),
+      );
+      transport.addEventListener("chunk", (e) =>
+        this._onChunk(e.detail, transport),
+      );
+    }
+
+    _sendJsonFor(job, obj) {
+      try {
+        job.transport.sendJson(obj);
+      } catch (err) {
+        if (job.transport === this.rc) throw err;
+
+        log.warn(
+          `WebRTC send failed for transfer ${job.transferId}, falling back to relay`,
+          err,
+        );
+        job.transport = this.rc;
+        this.rc.sendJson(obj);
+      }
+    }
+
+    _sendChunkFor(job, transferId, fileIndex, offset, payload) {
+      try {
+        job.transport.sendChunk(transferId, fileIndex, offset, payload);
+      } catch (err) {
+        if (job.transport === this.rc) throw err;
+
+        log.warn(
+          `WebRTC send failed for transfer ${transferId}, falling back to relay`,
+          err,
+        );
+        job.transport = this.rc;
+        this.rc.sendChunk(transferId, fileIndex, offset, payload);
+      }
     }
 
     _tickStaleProgress() {
@@ -145,6 +192,108 @@
       if (incomingChanged) this._emitIncoming();
     }
 
+    _onFileAck(msg, transport) {
+      const key = `${msg.transferId}:${msg.fileIndex}`;
+      const resolve = this._pendingFileAcks.get(key);
+
+      if (transport) {
+        const job = this.outgoing.get(msg.transferId);
+        if (job) job.transport = transport;
+      }
+
+      if (resolve) {
+        this._pendingFileAcks.delete(key);
+        resolve(true);
+      }
+    }
+
+    async _onResendChunkRequest(msg, transport) {
+      const job = this.outgoing.get(msg.transferId);
+      if (!job) return;
+
+      if (transport) job.transport = transport;
+
+      const f =
+        job.files.find((file) => file.index === msg.fileIndex) ||
+        job.files[msg.fileIndex];
+      if (!f) return;
+
+      const offset = msg.offset;
+      if (typeof offset !== "number" || offset < 0 || offset >= f.size) return;
+
+      const end = Math.min(offset + CHUNK_SIZE, f.size);
+
+      try {
+        const buf = await withRetry(
+          async () => {
+            const b = await f.file.slice(offset, end).arrayBuffer();
+            const expectedLen = end - offset;
+
+            if (b.byteLength !== expectedLen) {
+              throw new Error(
+                `Short read at offset ${offset}: expected ${expectedLen} bytes, got ${b.byteLength}`,
+              );
+            }
+
+            return b;
+          },
+          {
+            retries: 3,
+            baseDelayMs: 200,
+            label: `Re-reading "${f.name}" at offset ${offset} for resend`,
+          },
+        );
+        this._sendChunkFor(job, msg.transferId, f.index, offset, new Uint8Array(buf));
+        log.info(
+          `Resent chunk at offset ${offset} for "${f.name}" (transfer ${msg.transferId}) on request`,
+        );
+      } catch (err) {
+        log.error(
+          `Failed to resend chunk at offset ${offset} for "${f.name}"`,
+          err,
+        );
+      }
+    }
+
+    _waitForFileAck(transferId, fileIndex, timeoutMs = 180000) {
+      const key = `${transferId}:${fileIndex}`;
+
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          this._pendingFileAcks.delete(key);
+          reject(
+            new Error(
+              "Timed out waiting for the receiver to finish saving the file.",
+            ),
+          );
+        }, timeoutMs);
+
+        this._pendingFileAcks.set(key, (ok) => {
+          clearTimeout(timer);
+          if (ok) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                "Connection lost while waiting for the receiver to finish saving the file.",
+              ),
+            );
+          }
+        });
+      });
+    }
+
+    _rejectPendingFileAcks(transferId) {
+      const prefix = `${transferId}:`;
+
+      for (const [key, resolve] of [...this._pendingFileAcks.entries()]) {
+        if (key.startsWith(prefix)) {
+          this._pendingFileAcks.delete(key);
+          resolve(false);
+        }
+      }
+    }
+
     _onDisconnected() {
       for (const job of this.outgoing.values()) {
         if (job.status === "requesting") {
@@ -154,6 +303,9 @@
       }
       for (const transferId of [...this._pendingResponses.keys()]) {
         this._resolvePending(transferId, false);
+      }
+      for (const transferId of this.outgoing.keys()) {
+        this._rejectPendingFileAcks(transferId);
       }
 
       for (const job of [...this.incoming.values()]) {
@@ -194,7 +346,7 @@
       }, 5000);
     }
 
-    queueSend(targetId, targetName, fileEntries) {
+    queueSend(targetId, targetName, fileEntries, forceRelay = false) {
       if (!Array.isArray(fileEntries) || fileEntries.length === 0) {
         return [];
       }
@@ -216,12 +368,16 @@
         files,
         totalBytes: files.reduce((sum, file) => sum + file.size, 0),
         sentBytes: 0,
-        status: "queued", // queued -> requesting -> sending -> done | rejected | canceled | error
+        status: "queued",
         currentFileIndex: -1,
         completedFileIndices: new Set(),
         error: null,
         startedAt: null,
         speedBytesPerSecond: 0,
+        forceRelay,
+        phase: "transferring",
+        transport: this.rc,
+        webrtcTransport: null,
       };
 
       this.outgoing.set(transferId, job);
@@ -255,6 +411,13 @@
 
       this._emitOutgoing();
       this._resolvePending(transferId, false);
+      this._rejectPendingFileAcks(transferId);
+
+      if (job.webrtcTransport) {
+        job.webrtcTransport.close();
+        job.webrtcTransport = null;
+      }
+      job.transport = this.rc;
     }
 
     async _pumpOutgoing() {
@@ -274,6 +437,22 @@
         if (job) {
           job.status = "error";
           job.error = err.message;
+
+          try {
+            this.rc.sendJson({
+              type: "transfer-cancel",
+              transferId: nextId,
+              reason: err.message,
+            });
+          } catch (sendErr) {
+            log.error("Failed to notify receiver of send failure", sendErr);
+          }
+
+          if (job.webrtcTransport) {
+            job.webrtcTransport.close();
+            job.webrtcTransport = null;
+          }
+          job.transport = this.rc;
 
           this._emitOutgoing();
           this._scheduleForget(this.outgoing, nextId, () =>
@@ -334,12 +513,50 @@
       this._emitOutgoing();
       log.info(`Transfer ${transferId} accepted, starting upload`);
 
+      if (job.forceRelay) {
+        log.info(
+          `Transfer ${transferId} is going to a remote peer, skipping WebRTC and using the relay`,
+        );
+      }
+
+      if (this.webrtcEnabled && !job.forceRelay) {
+        const webrtcTransport = new WebRtcTransport(this.rc, transferId);
+        this._wireDataListeners(webrtcTransport);
+
+        const ok = await webrtcTransport.connect(true, 8000);
+
+        if (job.status === "canceled") {
+          webrtcTransport.close();
+        } else if (ok) {
+          job.transport = webrtcTransport;
+          job.webrtcTransport = webrtcTransport;
+          log.info(`Using WebRTC data channel for transfer ${transferId}`);
+        } else {
+          webrtcTransport.close();
+          log.info(
+            `WebRTC unavailable for transfer ${transferId}, using relay`,
+          );
+        }
+      }
+
       for (const f of job.files) {
         if (job.status === "canceled") break;
+
+        if (!Number.isFinite(f.size) || f.size < 0) {
+          log.error(
+            `Invalid size for "${f.name}" (index ${f.index}) in transfer ${transferId}: ` +
+              `${f.size} (typeof ${typeof f.size})`,
+          );
+          throw new Error(
+            `"${f.name}" has an invalid size (${f.size}) and can't be sent.`,
+          );
+        }
+
         job.currentFileIndex = f.index;
+        job.phase = "transferring";
         this._emitOutgoing();
 
-        this.rc.sendJson({
+        this._sendJsonFor(job, {
           type: "file-start",
           transferId,
           fileIndex: f.index,
@@ -352,11 +569,33 @@
 
         while (offset < f.size) {
           if (job.status === "canceled") break;
+
+          if (!Number.isFinite(f.size) || f.size < 0) {
+            log.error(
+              `f.size for "${f.name}" became invalid mid-transfer at offset ${offset}: ` +
+                `${f.size} (typeof ${typeof f.size})`,
+            );
+            throw new Error(
+              `"${f.name}"'s size became invalid (${f.size}) partway through sending.`,
+            );
+          }
+
           const end = Math.min(offset + CHUNK_SIZE, f.size);
           let buf;
           try {
             buf = await withRetry(
-              () => f.file.slice(offset, end).arrayBuffer(),
+              async () => {
+                const b = await f.file.slice(offset, end).arrayBuffer();
+                const expectedLen = end - offset;
+
+                if (b.byteLength !== expectedLen) {
+                  throw new Error(
+                    `Short read at offset ${offset}: expected ${expectedLen} bytes, got ${b.byteLength}`,
+                  );
+                }
+
+                return b;
+              },
               {
                 retries: 3,
                 baseDelayMs: 200,
@@ -373,7 +612,7 @@
             );
           }
 
-          this.rc.sendChunk(transferId, f.index, offset, new Uint8Array(buf));
+          this._sendChunkFor(job, transferId, f.index, offset, new Uint8Array(buf));
           offset = end;
           job.sentBytes += buf.byteLength;
 
@@ -381,17 +620,34 @@
 
           this._emitOutgoing();
 
-          await this.rc.waitForDrain(BACKPRESSURE_THRESHOLD);
+          await job.transport.waitForDrain(BACKPRESSURE_THRESHOLD);
         }
 
         if (job.status === "canceled") break;
-        this.rc.sendJson({ type: "file-end", transferId, fileIndex: f.index });
+        this._sendJsonFor(job, { type: "file-end", transferId, fileIndex: f.index });
 
-        job.completedFileIndices.add(f.index);
+        job.phase = "finalizing";
         this._emitOutgoing();
 
         log.info(
-          `Finished sending file ${f.name} (${f.size} bytes) for transfer ${transferId}`,
+          `Finished sending file ${f.name} (${f.size} bytes) for transfer ${transferId}, waiting for receiver to save it`,
+        );
+
+        try {
+          await this._waitForFileAck(transferId, f.index);
+        } catch (err) {
+          if (job.status === "canceled") break;
+          throw new Error(`Receiver failed to save "${f.name}": ${err.message}`);
+        }
+
+        if (job.status === "canceled") break;
+
+        job.completedFileIndices.add(f.index);
+        job.phase = "transferring";
+        this._emitOutgoing();
+
+        log.info(
+          `Receiver confirmed "${f.name}" is saved for transfer ${transferId}`,
         );
       }
 
@@ -407,6 +663,12 @@
 
       job.status = "done";
       job.currentFileIndex = -1;
+
+      if (job.webrtcTransport) {
+        job.webrtcTransport.close();
+        job.webrtcTransport = null;
+      }
+      job.transport = this.rc;
 
       this._emitOutgoing();
       this._toast(
@@ -442,10 +704,17 @@
 
         this._emitOutgoing();
         this._resolvePending(msg.transferId, false);
+        this._rejectPendingFileAcks(msg.transferId);
         this._toast(
           `Transfer to ${outJob.targetName} was canceled: ${msg.reason || "unknown reason"}`,
           "error",
         );
+
+        if (outJob.webrtcTransport) {
+          outJob.webrtcTransport.close();
+          outJob.webrtcTransport = null;
+        }
+        outJob.transport = this.rc;
       }
 
       const inJob = this.incoming.get(msg.transferId);
@@ -455,6 +724,7 @@
         this._abortIncoming(
           inJob,
           msg.reason || "The sender canceled the transfer.",
+          false,
         );
       }
     }
@@ -468,11 +738,14 @@
         files: msg.files,
         totalBytes: totalSize(msg.files),
         receivedBytes: 0,
-        status: "pending-queue", // pending-queue -> pending-decision -> receiving -> done | rejected | canceled | error
+        status: "pending-queue",
         currentFileIndex: -1,
         completedFileIndices: new Set(),
         writers: new Map(),
         orphanChunks: new Map(),
+        transport: this.rc,
+        webrtcTransport: null,
+        phase: "transferring",
         decided: false,
         startedAt: null,
         speedBytesPerSecond: 0,
@@ -547,6 +820,15 @@
         `User ${accepted ? "accepted" : "rejected"} transfer ${transferId} from ${job.fromName}`,
       );
 
+      let webrtcConnectPromise = null;
+      let pendingWebrtcTransport = null;
+
+      if (accepted && this.webrtcEnabled) {
+        pendingWebrtcTransport = new WebRtcTransport(this.rc, transferId);
+        this._wireDataListeners(pendingWebrtcTransport);
+        webrtcConnectPromise = pendingWebrtcTransport.connect(false, 8000);
+      }
+
       try {
         this.rc.sendJson({ type: "transfer-response", transferId, accepted });
       } catch (err) {
@@ -571,6 +853,22 @@
       updateTransferProgress(job);
       this.incomingBusy = true;
       this._emitIncoming();
+
+      if (webrtcConnectPromise) {
+        webrtcConnectPromise.then((ok) => {
+          if (job.status === "canceled") {
+            pendingWebrtcTransport.close();
+            return;
+          }
+
+          if (ok) {
+            job.webrtcTransport = pendingWebrtcTransport;
+            log.info(`Using WebRTC data channel for transfer ${transferId}`);
+          } else {
+            pendingWebrtcTransport.close();
+          }
+        });
+      }
     }
 
     respondToRequests(transferIds, accepted) {
@@ -585,12 +883,15 @@
       }
     }
 
-    async _onFileStart(msg) {
+    async _onFileStart(msg, transport) {
       const job = this.incoming.get(msg.transferId);
 
       if (!job || job.status !== "receiving") return;
 
+      if (transport) job.transport = transport;
+
       job.currentFileIndex = msg.fileIndex;
+      job.phase = "transferring";
 
       this._emitIncoming();
 
@@ -661,12 +962,14 @@
       })();
     }
 
-    static MAX_ORPHAN_CHUNKS_PER_FILE = 256;
+    static MAX_ORPHAN_CHUNKS_PER_FILE = 64;
 
-    _onChunk(detail) {
+    _onChunk(detail, transport) {
       const job = this.incoming.get(detail.transferId);
 
       if (!job || job.status !== "receiving") return;
+
+      if (transport) job.transport = transport;
 
       const chunk =
         detail.payload instanceof Uint8Array
@@ -714,7 +1017,7 @@
         chunk,
       );
     }
-
+    
     _enqueueChunk(job, writer, transferId, fileIndex, offset, chunk) {
       writer.chain = writer.chain.then(async () => {
         try {
@@ -765,14 +1068,19 @@
       });
     }
 
-    async _onFileEnd(msg) {
+    async _onFileEnd(msg, transport) {
       const job = this.incoming.get(msg.transferId);
 
       if (!job || job.status !== "receiving") return;
 
+      if (transport) job.transport = transport;
+
       const writer = job.writers.get(msg.fileIndex);
 
       if (!writer) return;
+
+      job.phase = "finalizing";
+      this._emitIncoming();
 
       writer.chain = writer.chain.then(async () => {
         try {
@@ -799,7 +1107,86 @@
             updateTransferProgress(job);
             this._emitIncoming();
           }
+        } catch (err) {
+          log.error(
+            `Write failed for transfer ${msg.transferId} file ${msg.fileIndex}`,
+            err,
+          );
+          this._abortIncoming(job, `Failed writing to disk: ${err.message}`);
+          throw err;
+        }
+      });
 
+      try {
+        await writer.chain;
+      } catch {
+        return;
+      }
+
+      const expectedSize = (
+        job.files.find((file) => file.index === msg.fileIndex) ||
+        job.files[msg.fileIndex]
+      )?.size;
+
+      if (
+        job.status === "receiving" &&
+        expectedSize != null &&
+        writer.written < expectedSize
+      ) {
+        const missingOffsets = [];
+        let cursor = writer.written;
+
+        while (cursor < expectedSize) {
+          if (!writer.pendingChunks.has(cursor)) missingOffsets.push(cursor);
+          cursor += CHUNK_SIZE;
+        }
+
+        if (missingOffsets.length > 0) {
+          log.warn(
+            `File ${msg.fileIndex} for transfer ${msg.transferId} is missing ` +
+              `${missingOffsets.length} chunk(s) at file-end; requesting resend: ` +
+              `[${missingOffsets.slice(0, 5).join(", ")}${missingOffsets.length > 5 ? ", ..." : ""}]`,
+          );
+
+          for (const offset of missingOffsets) {
+            try {
+              this._sendJsonFor(job, {
+                type: "resend-chunk",
+                transferId: msg.transferId,
+                fileIndex: msg.fileIndex,
+                offset,
+              });
+            } catch (err) {
+              log.error("Failed to request chunk resend", err);
+            }
+          }
+        }
+
+        const GRACE_MS = 8000;
+        const POLL_MS = 100;
+        let waited = 0;
+
+        while (
+          job.status === "receiving" &&
+          writer.written < expectedSize &&
+          waited < GRACE_MS
+        ) {
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          waited += POLL_MS;
+        }
+
+        if (waited > 0 && writer.written >= expectedSize) {
+          log.warn(
+            `File ${msg.fileIndex} for transfer ${msg.transferId} recovered ` +
+              `${missingOffsets.length} missing chunk(s) via resend after ${waited}ms`,
+          );
+        }
+      }
+
+      if (job.status !== "receiving") return;
+
+      writer.chain = writer.chain.then(async () => {
+        try {
           if (writer.pendingChunks.size > 0) {
             const gotOffsets = [...writer.pendingChunks.keys()].sort(
               (a, b) => a - b,
@@ -834,6 +1221,13 @@
 
           this._emitIncoming();
           this.dispatchEvent(new CustomEvent("received-updated"));
+
+          this._sendJsonFor(job, {
+            type: "file-ack",
+            transferId: msg.transferId,
+            fileIndex: msg.fileIndex,
+          });
+
           log.info(
             `Closed file ${msg.fileIndex} for transfer ${msg.transferId}`,
           );
@@ -859,6 +1253,12 @@
       job.status = "done";
       job.currentFileIndex = -1;
 
+      if (job.webrtcTransport) {
+        job.webrtcTransport.close();
+        job.webrtcTransport = null;
+      }
+      job.transport = this.rc;
+
       this._emitIncoming();
       this._toast(
         `Received ${job.files.length} file(s) from ${job.fromName}.`,
@@ -877,7 +1277,7 @@
       this._pumpIncoming();
     }
 
-    _abortIncoming(job, reason) {
+    _abortIncoming(job, reason, notifyPeer = true) {
       const wasActive = job.status === "receiving";
 
       job.status = "canceled";
@@ -889,6 +1289,18 @@
         "error",
       );
 
+      if (notifyPeer) {
+        try {
+          this.rc.sendJson({
+            type: "transfer-cancel",
+            transferId: job.transferId,
+            reason,
+          });
+        } catch (err) {
+          log.error("Failed to notify sender of abort", err);
+        }
+      }
+
       for (const writer of job.writers.values()) {
         if (writer.writable) {
           writer.writable
@@ -898,6 +1310,12 @@
       }
 
       job.orphanChunks.clear();
+
+      if (job.webrtcTransport) {
+        job.webrtcTransport.close();
+        job.webrtcTransport = null;
+      }
+      job.transport = this.rc;
 
       if (wasActive) {
         window.OpfsStore?.deleteTransfer?.(job.transferId).catch((e) =>

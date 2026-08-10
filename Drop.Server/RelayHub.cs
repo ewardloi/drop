@@ -192,6 +192,11 @@ public class RelayHub(ILogger logger)
             case "transfer-response":
             case "file-start":
             case "file-end":
+            case "file-ack":
+            case "resend-chunk":
+            case "webrtc-offer":
+            case "webrtc-answer":
+            case "webrtc-ice":
             case "transfer-complete":
             case "transfer-cancel":
             {

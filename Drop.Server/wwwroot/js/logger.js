@@ -24,6 +24,7 @@
   window.Log = {
     app: make("app", "#0559C9"),
     ws: make("ws", "#7A3FE0"),
+    webrtc: make("webrtc", "#9333EA"),
     transfer: make("transfer", "#0FAE60"),
     opfs: make("opfs", "#C77A08"),
     ui: make("ui", "#E0293D"),

@@ -4,6 +4,7 @@
   const log = window.Log.ui;
 
   const ICON = {
+    spinner: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" class="spin"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="42" stroke-dashoffset="14"/></svg>`,
     check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     x: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
     download: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v12M12 15l-4.5-4.5M12 15l4.5-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
@@ -59,16 +60,17 @@
 
   function transferMetaParts(job, isOut) {
     const isActive = ["sending", "receiving"].includes(job.status);
+    const finalizing = isActive && job.phase === "finalizing";
     const doneBytes = isOut ? job.sentBytes : job.receivedBytes;
 
     const speedText =
-      isActive && job.speedBytesPerSecond > 0
+      isActive && !finalizing && job.speedBytesPerSecond > 0
         ? `${isOut ? "↑" : "↓"} ${formatBytesPerSecond(job.speedBytesPerSecond)}`
         : "";
-    const etaValue = isActive ? etaText(job, doneBytes) : "";
+    const etaValue = isActive && !finalizing ? etaText(job, doneBytes) : "";
     const sizeText = `${formatBytes(doneBytes)} / ${formatBytes(job.totalBytes)}`;
 
-    return { isActive, doneBytes, speedText, etaValue, sizeText };
+    return { isActive, finalizing, doneBytes, speedText, etaValue, sizeText };
   }
 
   const THEME_KEY = "drop.theme";
@@ -97,6 +99,141 @@
       const current = document.documentElement.getAttribute("data-theme");
       const next = order[(order.indexOf(current) + 1) % order.length];
       applyTheme(next);
+    });
+  }
+
+  const TRANSPORT_KEY = "drop.transportMode"; // "relay" | "webrtc"
+
+  function applyTransportMode(mode, tm) {
+    document.getElementById("transport-icon-relay").style.display =
+      mode === "webrtc" ? "none" : "";
+    document.getElementById("transport-icon-p2p").style.display =
+      mode === "webrtc" ? "" : "none";
+    document.getElementById("transport-label").textContent =
+      mode === "webrtc" ? "P2P" : "Relay";
+    document.getElementById("transport-toggle").title =
+      mode === "webrtc"
+        ? "Using direct P2P (WebRTC) when possible"
+        : "Using the relay server";
+
+    for (const item of document.querySelectorAll(
+      "#transport-menu .dropdown-item",
+    )) {
+      item.classList.toggle(
+        "selected",
+        item.dataset.transportMode === mode,
+      );
+    }
+
+    localStorage.setItem(TRANSPORT_KEY, mode);
+
+    if (tm) tm.webrtcEnabled = mode === "webrtc";
+
+    log.info(`Transfer mode set to ${mode}`);
+  }
+
+  function initTransportToggle(tm) {
+    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "webrtc";
+
+    applyTransportMode(saved, tm);
+
+    const dropdown = document.getElementById("transport-dropdown");
+    const toggleBtn = document.getElementById("transport-toggle");
+    const menu = document.getElementById("transport-menu");
+
+    function positionMenu() {
+      const rect = toggleBtn.getBoundingClientRect();
+      const menuWidth = Math.min(268, window.innerWidth - 24);
+
+      let left = rect.right - menuWidth;
+      left = Math.max(12, Math.min(left, window.innerWidth - menuWidth - 12));
+
+      menu.style.width = `${menuWidth}px`;
+      menu.style.left = `${left}px`;
+      menu.style.top = `${rect.bottom + 8}px`;
+    }
+
+    function openMenu() {
+      positionMenu();
+      menu.hidden = false;
+      dropdown.dataset.open = "true";
+      toggleBtn.setAttribute("aria-expanded", "true");
+    }
+
+    function closeMenu() {
+      menu.hidden = true;
+      delete dropdown.dataset.open;
+      toggleBtn.setAttribute("aria-expanded", "false");
+    }
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (menu.hidden) openMenu();
+      else closeMenu();
+    });
+
+    for (const item of menu.querySelectorAll(".dropdown-item")) {
+      item.addEventListener("click", () => {
+        applyTransportMode(item.dataset.transportMode, tm);
+        closeMenu();
+      });
+    }
+
+    window.addEventListener("resize", () => {
+      if (!menu.hidden) positionMenu();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!menu.hidden && !dropdown.contains(e.target)) closeMenu();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !menu.hidden) closeMenu();
+    });
+  }
+
+  function initNavMenu() {
+    const toggleBtn = document.getElementById("nav-toggle");
+    const panel = document.getElementById("topbar-secondary");
+
+    function openPanel() {
+      panel.dataset.open = "true";
+      toggleBtn.setAttribute("aria-expanded", "true");
+    }
+
+    function closePanel() {
+      delete panel.dataset.open;
+      toggleBtn.setAttribute("aria-expanded", "false");
+    }
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (panel.dataset.open === "true") closePanel();
+      else openPanel();
+    });
+
+    for (const btn of panel.querySelectorAll("button")) {
+      btn.addEventListener("click", () => closePanel());
+    }
+
+    document.addEventListener("click", (e) => {
+      if (
+        panel.dataset.open === "true" &&
+        !panel.contains(e.target) &&
+        !toggleBtn.contains(e.target)
+      ) {
+        closePanel();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && panel.dataset.open === "true") closePanel();
+    });
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 640 && panel.dataset.open === "true") {
+        closePanel();
+      }
     });
   }
 
@@ -481,18 +618,25 @@
           <div class="card-icon">${isOut ? ICON.download : ICON.folder}</div>
           <div class="card-main">
             <div class="card-title" title="${escapeHtml(currentFileTitle)}">${escapeHtml(currentFileTitle)}</div>
-            ${
-              isActive
-                ? `<div class="card-meta">
+          </div>
+          ${job.webrtcTransport ? `<span class="status-tag p2p" title="Direct P2P connection (WebRTC)">P2P</span>` : ""}
+          <span class="status-tag ${statusClass(job.status)}">${statusLabel(job.status)}</span>
+          ${canCancel ? `<button class="btn-ghost icon-only cancel-btn" title="Cancel">${ICON.stop}</button>` : ""}
+        </div>
+        <div class="card-footer-row">
+          ${
+            isActive
+              ? job.phase === "finalizing"
+                ? `<div class="card-meta finalizing">
+                    <span class="card-meta-status">${ICON.clock} Finishing file&hellip;</span>
+                  </div>`
+                : `<div class="card-meta">
                     <span class="card-meta-speed">${escapeHtml(speedText) || "&nbsp;"}</span>
                     <span class="card-meta-eta">${ICON.clock}<span>${escapeHtml(etaValue) || "&nbsp;"}</span></span>
                   </div>`
-                : ""
-            }
-          </div>
+              : ""
+          }
           <span class="card-size">${escapeHtml(sizeText)}</span>
-          <span class="status-tag ${statusClass(job.status)}">${statusLabel(job.status)}</span>
-          ${canCancel ? `<button class="btn-ghost icon-only cancel-btn" title="Cancel">${ICON.stop}</button>` : ""}
         </div>
         <div class="progress-track"><div class="progress-fill ${job.status === "error" ? "danger" : job.status === "done" ? "success" : ""}" style="width:${pct}%"></div></div>
       </div>
@@ -505,7 +649,7 @@
   function updateActiveTransferCard(card, job, onCancel) {
     const isOut = job.direction === "outgoing";
     const peerName = isOut ? job.targetName : job.fromName;
-    const { doneBytes, isActive, speedText, etaValue, sizeText } =
+    const { doneBytes, isActive, finalizing, speedText, etaValue, sizeText } =
       transferMetaParts(job, isOut);
     const pct =
       job.totalBytes > 0
@@ -525,25 +669,37 @@
     );
 
     const titleEl = card.querySelector(".card-title");
-    const cardMain = card.querySelector(".card-main");
+    const footerRow = card.querySelector(".card-footer-row");
     let metaEl = card.querySelector(".card-meta");
     const sizeEl = card.querySelector(".card-size");
-    const statusTag = card.querySelector(".status-tag");
+    let p2pTag = card.querySelector(".status-tag.p2p");
+    const statusTag = card.querySelector(".status-tag:not(.p2p)");
     const progressFill = card.querySelector(".progress-fill");
     const cancelBtn = card.querySelector(".cancel-btn");
 
     titleEl.textContent = currentFileTitle;
     titleEl.title = currentFileTitle;
 
-    if (isActive) {
-      if (!metaEl) {
+    if (finalizing) {
+      if (!metaEl || !metaEl.classList.contains("finalizing")) {
+        if (metaEl) metaEl.remove();
+        metaEl = el(`
+          <div class="card-meta finalizing">
+            <span class="card-meta-status">${ICON.clock} Finishing file&hellip;</span>
+          </div>
+        `);
+        footerRow.insertAdjacentElement("afterbegin", metaEl);
+      }
+    } else if (isActive) {
+      if (!metaEl || metaEl.classList.contains("finalizing")) {
+        if (metaEl) metaEl.remove();
         metaEl = el(`
           <div class="card-meta">
             <span class="card-meta-speed">&nbsp;</span>
             <span class="card-meta-eta">${ICON.clock}<span>&nbsp;</span></span>
           </div>
         `);
-        titleEl.insertAdjacentElement("afterend", metaEl);
+        footerRow.insertAdjacentElement("afterbegin", metaEl);
       }
       metaEl.querySelector(".card-meta-speed").innerHTML =
         escapeHtml(speedText) || "&nbsp;";
@@ -554,6 +710,19 @@
     }
 
     sizeEl.textContent = sizeText;
+
+    if (job.webrtcTransport) {
+      if (!p2pTag) {
+        p2pTag = document.createElement("span");
+        p2pTag.className = "status-tag p2p";
+        p2pTag.title = "Direct P2P connection (WebRTC)";
+        p2pTag.textContent = "P2P";
+        statusTag.insertAdjacentElement("beforebegin", p2pTag);
+      }
+    } else if (p2pTag) {
+      p2pTag.remove();
+    }
+
     statusTag.className = `status-tag ${statusClass(job.status)}`;
     statusTag.textContent = statusLabel(job.status);
     progressFill.style.width = `${pct}%`;
@@ -629,9 +798,11 @@
       </div>
     `);
 
-    row
-      .querySelector(".dl-btn")
-      .addEventListener("click", () => downloadEntry(entry));
+    row.querySelector(".dl-btn").addEventListener("click", (e) => {
+      withBusyButton(e.currentTarget, "Downloading…", () => downloadEntry(entry), {
+        iconOnly: true,
+      });
+    });
     row.querySelector(".del-btn").addEventListener("click", async () => {
       try {
         await window.OpfsStore.deleteEntry(entry);
@@ -757,24 +928,52 @@
       root.replaceChildren();
     }
 
-    clearAllBtn.onclick = async () => {
-      try {
-        await window.OpfsStore.clearAllReceived(activeIncomingTransferIds(tm));
-        toast("Cleared all received files", "success");
-        await renderReceivedFiles(tm);
-      } catch (err) {
-        log.error("Failed clearing received files", err);
-        toast(`Could not clear received files: ${err.message}`, "error");
-      }
-    };
+    clearAllBtn.onclick = () =>
+      withBusyButton(clearAllBtn, "Clearing…", async () => {
+        try {
+          await window.OpfsStore.clearAllReceived(
+            activeIncomingTransferIds(tm),
+          );
+          toast("Cleared all received files", "success");
+          await renderReceivedFiles(tm);
+        } catch (err) {
+          log.error("Failed clearing received files", err);
+          toast(`Could not clear received files: ${err.message}`, "error");
+        }
+      });
 
-    downloadAllBtn.onclick = async () => {
-      log.info(`Downloading all ${entries.length} received file(s)`);
-  
-      for (const entry of entries) {
-        await downloadEntry(entry);
-      }
-    };
+    downloadAllBtn.onclick = () =>
+      withBusyButton(downloadAllBtn, "Downloading…", async () => {
+        log.info(`Downloading all ${entries.length} received file(s)`);
+
+        for (const entry of entries) {
+          await downloadEntry(entry);
+        }
+      });
+  }
+
+  async function withBusyButton(button, busyLabel, fn, { iconOnly = false } = {}) {
+    if (button.dataset.busy === "true") return;
+
+    button.dataset.busy = "true";
+    button.disabled = true;
+
+    const originalHtml = button.innerHTML;
+    const originalTitle = button.title;
+
+    button.innerHTML = iconOnly
+      ? ICON.spinner
+      : `${ICON.spinner}<span class="btn-label">${escapeHtml(busyLabel)}</span>`;
+    if (iconOnly) button.title = busyLabel;
+
+    try {
+      await fn();
+    } finally {
+      button.innerHTML = originalHtml;
+      button.title = originalTitle;
+      button.disabled = false;
+      delete button.dataset.busy;
+    }
   }
 
   async function downloadEntry(entry) {
@@ -808,6 +1007,8 @@
   window.UI = {
     formatBytes,
     initTheme,
+    initTransportToggle,
+    initNavMenu,
     toast,
     renderDevices,
     initGlobalDropOverlay,
