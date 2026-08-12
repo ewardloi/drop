@@ -42,11 +42,29 @@
     return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
   }
 
+  function currentFileRemainingBytes(job, doneBytes) {
+    const currentFile = job.files?.[job.currentFileIndex];
+    if (!currentFile || !(currentFile.size > 0)) return null;
+
+    let bytesBeforeCurrent = 0;
+    for (let i = 0; i < job.currentFileIndex; i++) {
+      bytesBeforeCurrent += job.files[i]?.size || 0;
+    }
+
+    const doneInFile = Math.min(
+      currentFile.size,
+      Math.max(0, doneBytes - bytesBeforeCurrent),
+    );
+
+    return currentFile.size - doneInFile;
+  }
+
   function etaText(job, doneBytes) {
     if (!["sending", "receiving"].includes(job.status)) return "";
     if (!(job.speedBytesPerSecond > 0)) return "";
 
-    const remainingBytes = job.totalBytes - doneBytes;
+    const remainingBytes =
+      currentFileRemainingBytes(job, doneBytes) ?? job.totalBytes - doneBytes;
     if (remainingBytes <= 0) return "";
 
     return `${formatDuration(remainingBytes / job.speedBytesPerSecond)} left`;
@@ -630,10 +648,11 @@
               ? job.phase === "finalizing"
                 ? `<div class="card-meta finalizing">
                     <span class="card-meta-status">${ICON.clock} Finishing file&hellip;</span>
+                    <span class="card-meta-status-spacer">&nbsp;</span>
                   </div>`
                 : `<div class="card-meta">
-                    <span class="card-meta-speed">${escapeHtml(speedText) || "&nbsp;"}</span>
-                    <span class="card-meta-eta">${ICON.clock}<span>${escapeHtml(etaValue) || "&nbsp;"}</span></span>
+                    <span class="card-meta-speed"${speedText ? "" : ' style="visibility:hidden"'}>${escapeHtml(speedText) || "&nbsp;"}</span>
+                    <span class="card-meta-eta"${etaValue ? "" : ' style="visibility:hidden"'}>${ICON.clock}<span>${escapeHtml(etaValue) || "&nbsp;"}</span></span>
                   </div>`
               : ""
           }
@@ -687,6 +706,7 @@
         metaEl = el(`
           <div class="card-meta finalizing">
             <span class="card-meta-status">${ICON.clock} Finishing file&hellip;</span>
+            <span class="card-meta-status-spacer">&nbsp;</span>
           </div>
         `);
         footerRow.insertAdjacentElement("afterbegin", metaEl);
@@ -702,10 +722,12 @@
         `);
         footerRow.insertAdjacentElement("afterbegin", metaEl);
       }
-      metaEl.querySelector(".card-meta-speed").innerHTML =
-        escapeHtml(speedText) || "&nbsp;";
-      metaEl.querySelector(".card-meta-eta span").innerHTML =
-        escapeHtml(etaValue) || "&nbsp;";
+      const speedEl = metaEl.querySelector(".card-meta-speed");
+      const etaEl = metaEl.querySelector(".card-meta-eta");
+      speedEl.innerHTML = escapeHtml(speedText) || "&nbsp;";
+      speedEl.style.visibility = speedText ? "" : "hidden";
+      etaEl.querySelector("span").innerHTML = escapeHtml(etaValue) || "&nbsp;";
+      etaEl.style.visibility = etaValue ? "" : "hidden";
     } else if (metaEl) {
       metaEl.remove();
     }

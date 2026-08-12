@@ -608,6 +608,9 @@ p {
 .card-meta-status svg {
   flex-shrink: 0;
 }
+.card-meta-status-spacer {
+  visibility: hidden;
+}
 @keyframes card-meta-pulse {
   0%,
   100% {

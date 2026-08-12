@@ -73,6 +73,11 @@
     job.lastProgressBytes = doneBytes;
   }
 
+  function resetProgressClock(job, doneBytes) {
+    job.lastProgressAt = Date.now();
+    job.lastProgressBytes = doneBytes;
+  }
+
   class TransferManager extends EventTarget {
     constructor(relayClient) {
       super();
@@ -165,7 +170,7 @@
       let incomingChanged = false;
 
       for (const job of this.outgoing.values()) {
-        if (job.status !== "sending") continue;
+        if (job.status !== "sending" || job.phase === "finalizing") continue;
         if (
           job.speedBytesPerSecond > 0 &&
           job.lastProgressAt != null &&
@@ -177,7 +182,7 @@
       }
 
       for (const job of this.incoming.values()) {
-        if (job.status !== "receiving") continue;
+        if (job.status !== "receiving" || job.phase === "finalizing") continue;
         if (
           job.speedBytesPerSecond > 0 &&
           job.lastProgressAt != null &&
@@ -652,6 +657,7 @@
 
         job.completedFileIndices.add(f.index);
         job.phase = "transferring";
+        resetProgressClock(job, job.sentBytes);
         this._emitOutgoing();
 
         log.info(
@@ -910,6 +916,7 @@
 
       job.currentFileIndex = msg.fileIndex;
       job.phase = "transferring";
+      resetProgressClock(job, job.receivedBytes);
 
       this._emitIncoming();
 
