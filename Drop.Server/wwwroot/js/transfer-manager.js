@@ -352,7 +352,7 @@
       }, 5000);
     }
 
-    queueSend(targetId, targetName, fileEntries, forceRelay = false) {
+    queueSend(targetId, targetName, fileEntries, forceRelay = false, transferKind = "file") {
       if (!Array.isArray(fileEntries) || fileEntries.length === 0) {
         return [];
       }
@@ -381,6 +381,7 @@
         startedAt: null,
         speedBytesPerSecond: 0,
         forceRelay,
+        transferKind,
         phase: "transferring",
         transport: this.rc,
         webrtcTransport: null,
@@ -490,6 +491,7 @@
         type: "transfer-request",
         transferId,
         targetId: job.targetId,
+        transferKind: job.transferKind,
         files: job.files.map((f) => ({
           name: f.name,
           size: f.size,
@@ -773,6 +775,10 @@
         direction: "incoming",
         fromId: msg.fromId,
         fromName: msg.fromName,
+        transferKind: ["clipboard", "secret"].includes(msg.transferKind)
+          ? msg.transferKind
+          : "file",
+        receivedAt: null,
         files: msg.files,
         totalBytes: totalSize(msg.files),
         receivedBytes: 0,
@@ -934,6 +940,7 @@
       if (transport) job.transport = transport;
 
       job.currentFileIndex = msg.fileIndex;
+      if (job.receivedAt === null) job.receivedAt = Date.now();
       job.phase = "transferring";
       resetProgressClock(job, job.receivedBytes);
 
@@ -1254,6 +1261,11 @@
               await window.OpfsStore.markFileCompleted(
                 msg.transferId,
                 completedFile.relativePath,
+                {
+                  transferKind: job.transferKind,
+                  senderName: job.fromName,
+                  receivedAt: job.receivedAt,
+                },
               );
             } catch (err) {
               log.warn(

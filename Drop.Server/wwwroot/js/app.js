@@ -118,6 +118,11 @@
         return;
       }
 
+      if (mode === "clipboard" || mode === "secret") {
+        sendText(peer, mode);
+        return;
+      }
+
       pendingTarget = peer;
 
       if (mode === "folder") {
@@ -127,6 +132,35 @@
         filePicker.value = "";
         filePicker.click();
       }
+    }
+
+    async function sendText(peer, kind) {
+      let text;
+      try {
+        text = kind === "clipboard"
+          ? await navigator.clipboard.readText()
+          : await window.UI.promptSecret();
+      } catch (err) {
+        log.error(`Could not read ${kind} text`, err);
+        window.UI.toast(
+          kind === "clipboard"
+            ? `Could not read the clipboard: ${err.message}`
+            : `Could not prepare the secret: ${err.message}`,
+          "error",
+        );
+        return;
+      }
+
+      if (text === null || text === undefined) return;
+      const fileName = `${kind}.txt`;
+      const file = new File([text], fileName, { type: "text/plain" });
+      tm.queueSend(
+        peer.id,
+        peer.name,
+        [{ file, relativePath: fileName }],
+        isRemotePeer(peer),
+        kind,
+      );
     }
 
     filePicker.addEventListener("change", () => {

@@ -513,7 +513,7 @@
 
         <div id="received-files-section">
           <div class="panel-header sub-header">
-            <h3>Received files</h3>
+            <h3>Received</h3>
             <div class="panel-header-actions">
               <button
                 id="download-all-btn"
@@ -588,7 +588,24 @@
       </form>
     </dialog>
 
-    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <dialog id="text-dialog" class="dialog text-dialog">
+      <form id="text-dialog-form">
+        <h3 id="text-dialog-title">Send secret</h3>
+        <textarea id="text-dialog-value" rows="8" readonly></textarea>
+        <div class="dialog-actions">
+          <button id="text-dialog-toggle" type="button" class="visibility-toggle" role="switch" aria-checked="false" aria-label="Secret hidden" hidden>
+            <span class="visibility-toggle-icon" aria-hidden="true"></span>
+            <span class="visibility-toggle-state">Hidden</span>
+            <span class="visibility-toggle-track" aria-hidden="true"><span></span></span>
+          </button>
+          <button id="text-dialog-copy" type="button" class="btn-secondary" hidden>Copy</button>
+          <button id="text-dialog-close" type="button" class="btn-secondary">Cancel</button>
+          <button id="text-dialog-submit" type="submit" class="btn-primary">Send secret</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast-root" class="toast-root" popover="manual" aria-live="polite"></div>
 
     <script src="js/logger.js"></script>
     <script src="js/opfs.js"></script>

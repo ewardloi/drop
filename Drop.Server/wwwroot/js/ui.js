@@ -2,6 +2,9 @@
   "use strict";
 
   const log = window.Log.ui;
+  let deviceMenuController = null;
+  let textDialogSecretValue = "";
+  let textDialogSecretMasked = false;
 
   const ICON = {
     spinner: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" class="spin"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="42" stroke-dashoffset="14"/></svg>`,
@@ -14,6 +17,9 @@
     file: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     folder: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
     doc: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+    eye: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/></svg>`,
+    eyeOff: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="m3 3 18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 5.2A10.7 10.7 0 0 1 12 5c6.1 0 9.5 7 9.5 7a15.8 15.8 0 0 1-3.1 3.8M6.2 6.3C3.8 8 2.5 12 2.5 12s3.4 7 9.5 7c1.1 0 2.1-.2 3-.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="13" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.7"/></svg>`,
     clock: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3.2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   };
 
@@ -301,14 +307,59 @@
     });
   }
 
+  function toastPopoverIsOpen(root) {
+    if (typeof root.hidePopover !== "function") return false;
+
+    try {
+      return root.matches(":popover-open");
+    } catch {
+      return false;
+    }
+  }
+
   function toast(message, kind) {
     const root = document.getElementById("toast-root");
     const node = el(`<div class="toast ${kind || ""}">${message}</div>`);
 
     root.appendChild(node);
+
+    if (typeof root.showPopover === "function") {
+      try {
+        if (toastPopoverIsOpen(root)) root.hidePopover();
+        root.showPopover();
+      } catch (err) {
+        root.removeAttribute("popover");
+        log.warn("Could not promote notifications to the top layer", err);
+      }
+    }
+
+    const openDialog = document.querySelector("dialog[open]");
+
+    if (!toastPopoverIsOpen(root) && openDialog && !openDialog.contains(root)) {
+      openDialog.appendChild(root);
+      root.dataset.toastDialog = openDialog.id;
+      openDialog.addEventListener("close", () => {
+        if (root.dataset.toastDialog !== openDialog.id) return;
+
+        document.body.appendChild(root);
+        delete root.dataset.toastDialog;
+      }, { once: true });
+    }
+
     log[kind === "error" ? "error" : "info"]("Toast:", message);
 
-    setTimeout(() => node.remove(), 5000);
+    setTimeout(() => {
+      node.remove();
+      
+      if (root.childElementCount > 0) return;
+
+      if (toastPopoverIsOpen(root)) root.hidePopover();
+      
+      if (root.dataset.toastDialog) {
+        document.body.appendChild(root);
+        delete root.dataset.toastDialog;
+      }
+    }, 5000);
   }
 
   function renderDevices(peers, onPick, selfCanUpload) {
@@ -317,6 +368,11 @@
     const count = document.getElementById("peer-count");
 
     count.textContent = `${peers.length} online`;
+    
+    deviceMenuController?.abort();
+    deviceMenuController = new AbortController();
+
+    document.querySelectorAll(".device-context-menu").forEach((menu) => menu.remove());
     grid.innerHTML = "";
     empty.style.display = peers.length === 0 ? "flex" : "none";
 
@@ -325,7 +381,7 @@
       const mode = canUpload && selfCanUpload ? "local" : "remote";
 
       const card = el(`
-        <div class="device-card ${canUpload ? "" : "download-only"} ${selfCanUpload ? "" : "upload-disabled"}" role="listitem" data-id="${peer.id}" title="${selfCanUpload ? "Click to send files, Shift+Click to send a folder, or drag files here" : "You are on a public network and can only receive files"}">
+        <div class="device-card ${canUpload ? "" : "download-only"} ${selfCanUpload ? "" : "upload-disabled"}" role="listitem" data-id="${peer.id}" title="${selfCanUpload ? "Click to send files, Shift+Click to send a folder, or right-click for more options" : "You are on a public network and can only receive files"}">
           <span class="status-dot pulse"></span>
           <div class="device-avatar">${ICON.laptop}</div>
           <div class="device-card-name">${escapeHtml(peer.name)}</div>
@@ -334,6 +390,12 @@
       `);
 
       card.addEventListener("click", (e) => {
+        if (card.dataset.suppressClick === "true") {
+          delete card.dataset.suppressClick;
+          e.preventDefault();
+          return;
+        }
+
         if (!selfCanUpload) {
           toast(
             "You are outside the local network, so you can only receive files.",
@@ -343,6 +405,74 @@
         }
         onPick(peer, e.shiftKey ? "folder" : "files");
       });
+
+      const menu = el(`
+        <div class="device-context-menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-action="files">${ICON.file}<span>Send files</span></button>
+          <button type="button" role="menuitem" data-action="folder">${ICON.folder}<span>Send folder</span></button>
+          <button type="button" role="menuitem" data-action="clipboard">${ICON.copy}<span>Send from clipboard</span></button>
+          <button type="button" role="menuitem" data-action="secret">${ICON.doc}<span>Send secret</span></button>
+        </div>
+      `);
+      document.body.appendChild(menu);
+
+      function closeMenu() {
+        menu.hidden = true;
+      }
+
+      function openMenu(x, y) {
+        if (!selfCanUpload) {
+          toast("You are outside the local network, so you can only receive files.", "error");
+          return;
+        }
+
+        menu.hidden = false;
+        
+        const rect = menu.getBoundingClientRect();
+        
+        menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+        menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+      }
+
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        closeMenu();
+        openMenu(e.clientX, e.clientY);
+      });
+
+      let pressTimer = null;
+
+      card.addEventListener("pointerdown", (e) => {
+        if (e.pointerType !== "touch") return;
+
+        pressTimer = setTimeout(() => {
+          card.dataset.suppressClick = "true";
+          openMenu(e.clientX, e.clientY);
+          pressTimer = null;
+        }, 550);
+      });
+
+      for (const eventName of ["pointerup", "pointercancel", "pointermove"]) {
+        card.addEventListener(eventName, () => {
+          if (pressTimer) clearTimeout(pressTimer);
+          pressTimer = null;
+        });
+      }
+
+      menu.addEventListener("click", (e) => {
+        const button = e.target.closest("button[data-action]");
+        if (!button) return;
+        closeMenu();
+        onPick(peer, button.dataset.action);
+      });
+
+      document.addEventListener("pointerdown", (e) => {
+        if (!menu.hidden && !menu.contains(e.target)) closeMenu();
+      }, { signal: deviceMenuController.signal });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeMenu();
+      }, { signal: deviceMenuController.signal });
 
       card.addEventListener("dragover", (e) => {
         if (!selfCanUpload) {
@@ -850,27 +980,53 @@
   }
 
   function createReceivedRow(entry) {
+    const special = ["clipboard", "secret"].includes(entry.transferKind);
+
+    const receivedTime = entry.receivedAt
+      ? new Date(entry.receivedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })
+      : "";
+
+    const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
+    
+    const titleText = special
+      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
+      : entry.relativePath;
+
     const row = el(`
       <div class="card received-row" data-file-key="${receivedFileKey(entry)}">
         <div class="card-row">
           <div class="card-icon">${ICON.doc}</div>
           <div style="min-width:0; flex:1;">
-            <div class="card-title">${escapeHtml(entry.relativePath)}</div>
-            <div class="card-sub">${formatBytes(entry.size)}</div>
+            <div class="card-title">${escapeHtml(titleText)}</div>
+            <div class="card-sub">${special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size)}</div>
           </div>
           <div class="card-actions">
-            <button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>
+            ${special ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button><button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
             <button class="btn-danger icon-only del-btn" title="Delete">${ICON.trash}</button>
           </div>
         </div>
       </div>
     `);
 
-    row.querySelector(".dl-btn").addEventListener("click", (e) => {
-      withBusyButton(e.currentTarget, "Downloading…", () => downloadEntry(entry), {
-        iconOnly: true,
-      });
+    const downloadButton = row.querySelector(".dl-btn");
+
+    if (downloadButton) downloadButton.addEventListener("click", (e) => {
+      withBusyButton(e.currentTarget, "Downloading…", () => downloadEntry(entry), { iconOnly: true });
     });
+
+    const viewButton = row.querySelector(".view-btn");
+
+    if (viewButton) viewButton.addEventListener("click", () => viewReceivedText(entry));
+
+    const copyButton = row.querySelector(".copy-btn");
+
+    if (copyButton) copyButton.addEventListener("click", () => copyReceivedText(entry));
+
     row.querySelector(".del-btn").addEventListener("click", async () => {
       try {
         await window.OpfsStore.deleteEntry(entry);
@@ -894,9 +1050,16 @@
     const title = row.querySelector(".card-title");
     const sub = row.querySelector(".card-sub");
 
-    title.textContent = entry.relativePath;
-    title.title = entry.relativePath;
-    sub.textContent = formatBytes(entry.size);
+    const special = ["clipboard", "secret"].includes(entry.transferKind);
+    const receivedTime = entry.receivedAt
+      ? new Date(entry.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "";
+    const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
+    title.textContent = special
+      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
+      : entry.relativePath;
+    title.title = title.textContent;
+    sub.textContent = special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size);
   }
 
   const INCOMING_TERMINAL_STATUSES = new Set([
@@ -961,7 +1124,10 @@
     clearAllBtn.hidden = shouldHideClearAll;
     clearAllBtn.style.display = shouldHideClearAll ? "none" : "";
 
-    const shouldHideDownloadAll = isSafari() || entries.length < 2;
+    const downloadableEntries = entries.filter(
+      (entry) => !["clipboard", "secret"].includes(entry.transferKind),
+    );
+    const shouldHideDownloadAll = isSafari() || downloadableEntries.length < 2;
     downloadAllBtn.hidden = shouldHideDownloadAll;
     downloadAllBtn.style.display = shouldHideDownloadAll ? "none" : "";
 
@@ -1012,9 +1178,9 @@
 
     downloadAllBtn.onclick = () =>
       withBusyButton(downloadAllBtn, "Downloading…", async () => {
-        log.info(`Downloading all ${entries.length} received file(s)`);
+        log.info(`Downloading all ${downloadableEntries.length} received file(s)`);
 
-        for (const entry of entries) {
+        for (const entry of downloadableEntries) {
           await downloadEntry(entry);
         }
       });
@@ -1068,6 +1234,140 @@
     }
   }
 
+  async function viewReceivedText(entry) {
+    try {
+      const file = await window.OpfsStore.getFile(entry);
+      const dialog = document.getElementById("text-dialog");
+      const isSecret = entry.transferKind === "secret";
+      document.getElementById("text-dialog-title").textContent =
+        isSecret ? "Received secret" : "Received clipboard";
+      textDialogSecretValue = await file.text();
+      textDialogSecretMasked = isSecret;
+      document.getElementById("text-dialog-value").value = isSecret
+        ? maskSecretText(textDialogSecretValue)
+        : textDialogSecretValue;
+      document.getElementById("text-dialog-copy").hidden = false;
+      document.getElementById("text-dialog-submit").hidden = true;
+      document.getElementById("text-dialog-toggle").hidden = !isSecret;
+      document.getElementById("text-dialog-close").textContent = "Close";
+      document.getElementById("text-dialog-value").readOnly = true;
+      updateTextDialogToggle();
+      dialog.dataset.mode = "view";
+      dialog.showModal();
+    } catch (err) {
+      log.error("Could not open received text", err);
+      toast(`Could not open text: ${err.message}`, "error");
+    }
+  }
+
+  function maskSecretText(text) {
+    return text.replace(/[^\r\n]/g, "•");
+  }
+
+  function updateTextDialogToggle() {
+    const button = document.getElementById("text-dialog-toggle");
+    const isVisible = !textDialogSecretMasked;
+    button.querySelector(".visibility-toggle-icon").innerHTML =
+      isVisible ? ICON.eyeOff : ICON.eye;
+    button.querySelector(".visibility-toggle-state").textContent =
+      isVisible ? "Visible" : "Hidden";
+    button.classList.toggle("is-visible", isVisible);
+    button.setAttribute("aria-checked", String(isVisible));
+    button.setAttribute("aria-label", `Secret ${isVisible ? "visible" : "hidden"}`);
+    button.title = `Secret ${isVisible ? "visible" : "hidden"}`;
+  }
+
+  async function copyReceivedText(entry) {
+    try {
+      const file = await window.OpfsStore.getFile(entry);
+      await navigator.clipboard.writeText(await file.text());
+      toast("Copied to clipboard", "success");
+    } catch (err) {
+      log.error("Could not copy received text", err);
+      toast(`Could not copy text: ${err.message}`, "error");
+    }
+  }
+
+  function promptSecret() {
+    return new Promise((resolve) => {
+      const dialog = document.getElementById("text-dialog");
+      const form = document.getElementById("text-dialog-form");
+      const value = document.getElementById("text-dialog-value");
+      const copyButton = document.getElementById("text-dialog-copy");
+      const closeButton = document.getElementById("text-dialog-close");
+      document.getElementById("text-dialog-title").textContent = "Send secret";
+      textDialogSecretValue = "";
+      textDialogSecretMasked = true;
+      value.value = "";
+      value.readOnly = false;
+      value.classList.add("secret-masked");
+      copyButton.hidden = true;
+      document.getElementById("text-dialog-submit").hidden = false;
+      document.getElementById("text-dialog-toggle").hidden = false;
+      closeButton.textContent = "Cancel";
+      updateTextDialogToggle();
+      dialog.dataset.mode = "send";
+      dialog.showModal();
+      value.focus();
+
+      function finish(result) {
+        form.removeEventListener("submit", onSubmit);
+        dialog.removeEventListener("close", onClose);
+        value.readOnly = true;
+        value.classList.remove("secret-masked");
+        textDialogSecretValue = "";
+        textDialogSecretMasked = false;
+        value.value = "";
+        resolve(result);
+      }
+      function onSubmit(event) {
+        event.preventDefault();
+        const text = textDialogSecretValue;
+        dialog.close();
+        finish(text);
+      }
+      function onClose() {
+        finish(null);
+      }
+      form.addEventListener("submit", onSubmit);
+      dialog.addEventListener("close", onClose, { once: true });
+    });
+  }
+
+  document.getElementById("text-dialog-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(textDialogSecretValue);
+      toast("Copied to clipboard", "success");
+    } catch (err) {
+      toast(`Could not copy text: ${err.message}`, "error");
+    }
+  });
+  document.getElementById("text-dialog-close").addEventListener("click", () => {
+    document.getElementById("text-dialog").close();
+  });
+  document.getElementById("text-dialog-value").addEventListener("input", (event) => {
+    if (document.getElementById("text-dialog").dataset.mode !== "send") return;
+    textDialogSecretValue = event.currentTarget.value;
+  });
+  document.getElementById("text-dialog-toggle").addEventListener("click", () => {
+    textDialogSecretMasked = !textDialogSecretMasked;
+    const value = document.getElementById("text-dialog-value");
+    if (document.getElementById("text-dialog").dataset.mode === "send") {
+      value.classList.toggle("secret-masked", textDialogSecretMasked);
+    } else {
+      value.value = textDialogSecretMasked
+        ? maskSecretText(textDialogSecretValue)
+        : textDialogSecretValue;
+    }
+    updateTextDialogToggle();
+    value.focus();
+  });
+  document.getElementById("text-dialog").addEventListener("close", () => {
+    if (document.getElementById("text-dialog").dataset.mode !== "view") return;
+    textDialogSecretValue = "";
+    document.getElementById("text-dialog-value").value = "";
+  });
+
   function isSafari() {
     return /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
   }
@@ -1086,5 +1386,7 @@
     renderActiveTransfers,
     renderReceivedFiles,
     escapeHtml,
+    promptSecret,
+    viewReceivedText,
   };
 })();

@@ -175,7 +175,7 @@
     return getFileViaWorker(client, entry);
   }
 
-  async function markFileCompleted(transferId, relativePath) {
+  async function markFileCompleted(transferId, relativePath, metadata = {}) {
     const { dirHandle, fileName } = await resolveParentDir(
       transferId,
       relativePath,
@@ -187,7 +187,7 @@
 
     const writable = await marker.createWritable();
 
-    await writable.write(new TextEncoder().encode("complete"));
+    await writable.write(new TextEncoder().encode(JSON.stringify(metadata)));
     await writable.close();
 
     log.info(`Marked file complete ${relativePath} in transfer ${transferId}`);
@@ -227,9 +227,10 @@
         try {
           const markerName = markerNameFor(name);
           let hasCompletedMarker = false;
+          let markerHandle = null;
 
           try {
-            await dirHandle.getFileHandle(markerName, { create: false });
+            markerHandle = await dirHandle.getFileHandle(markerName, { create: false });
             hasCompletedMarker = true;
           } catch (err) {
             if (err.name !== "NotFoundError") {
@@ -239,6 +240,13 @@
 
           if (!hasCompletedMarker) continue;
 
+          let metadata = {};
+          try {
+            metadata = JSON.parse(await (await markerHandle.getFile()).text());
+          } catch {
+            metadata = {};
+          }
+
           const file = await handle.getFile();
           out.push({
             transferId,
@@ -246,6 +254,9 @@
             name,
             size: file.size,
             lastModified: file.lastModified,
+            transferKind: metadata.transferKind || "file",
+            senderName: metadata.senderName || "",
+            receivedAt: metadata.receivedAt || null,
             handle,
             parentDirHandle: dirHandle,
           });
