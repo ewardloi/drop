@@ -532,16 +532,16 @@
       } else if (this.transportMode === "relay") {
         log.info(`Transfer ${transferId}: relay-only mode enabled`);
       } else if (!remoteWantsWebrtc) {
-        if (this.transportMode === "p2p-only") {
+        if (this.transportMode === "p2p") {
           throw new Error(
-            `Transfer ${transferId}: receiver does not allow direct P2P, aborting as required by P2P-only mode.`,
+            `Transfer ${transferId}: receiver does not allow direct P2P, aborting as required by the P2P mode.`,
           );
         }
         log.info(
           `Transfer ${transferId}: receiver is not using WebRTC, using the relay`,
         );
-      } else if (this.transportMode === "p2p-only") {
-        log.info(`Transfer ${transferId}: P2P-only mode enabled`);
+      } else if (this.transportMode === "p2p") {
+        log.info(`Transfer ${transferId}: P2P mode enabled`);
       }
 
       if (canUseWebrtc && this.transportMode !== "relay") {
@@ -559,7 +559,7 @@
         } else {
           webrtcTransport.close();
 
-          if (this.transportMode === "p2p-only") {
+          if (this.transportMode === "p2p") {
             throw new Error(
               `P2P connection failed for transfer ${transferId}; aborting as required by the current mode.`,
             );

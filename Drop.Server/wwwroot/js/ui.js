@@ -123,14 +123,14 @@
   const TRANSPORT_KEY = "drop.transportMode";
 
   function applyTransportMode(mode, tm, canUpload = true) {
-    const normalizedMode = ["auto", "p2p-only", "relay"].includes(mode)
+    const normalizedMode = ["auto", "p2p", "relay"].includes(mode)
       ? mode
       : "auto";
     const effectiveMode = canUpload ? normalizedMode : "relay";
 
     const labelByMode = {
       auto: "Auto",
-      "p2p-only": "P2P only",
+      p2p: "P2P",
       relay: "Relay",
     };
 
@@ -144,10 +144,10 @@
       !canUpload
         ? "This device can only receive files"
         : effectiveMode === "auto"
-          ? "Auto: try direct P2P, then fall back to relay"
-          : effectiveMode === "p2p-only"
-            ? "P2P only: direct connection required"
-            : "Relay only: always route through the server";
+          ? "Auto"
+          : effectiveMode === "p2p"
+            ? "P2P"
+            : "Relay";
 
     for (const item of document.querySelectorAll(
       "#transport-menu .dropdown-item",
@@ -170,7 +170,7 @@
 
   function setTransportAvailability(tm, canUpload) {
     const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
-    const normalizedSaved = ["auto", "p2p-only", "relay"].includes(saved)
+    const normalizedSaved = ["auto", "p2p", "relay"].includes(saved)
       ? saved
       : "auto";
 
@@ -192,7 +192,7 @@
 
   function initTransportToggle(tm) {
     const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
-    const normalizedSaved = ["auto", "p2p-only", "relay"].includes(saved)
+    const normalizedSaved = ["auto", "p2p", "relay"].includes(saved)
       ? saved
       : "auto";
 
