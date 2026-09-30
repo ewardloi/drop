@@ -584,6 +584,7 @@
         groups.set(key, {
           fromName: job.fromName,
           transferIds: [],
+          transferKinds: new Set(),
           files: [],
           totalBytes: 0,
           canAct: false,
@@ -593,6 +594,7 @@
       const group = groups.get(key);
 
       group.transferIds.push(job.transferId);
+      group.transferKinds.add(job.transferKind || "file");
       group.files.push(...job.files);
       group.totalBytes += job.totalBytes;
       group.canAct = group.canAct || job.status === "pending-decision";
@@ -615,6 +617,16 @@
           : "";
       const fileLabel =
         group.files.length === 1 ? "1 file" : `${group.files.length} files`;
+      const specialKind =
+        group.transferKinds.size === 1 &&
+        ["clipboard", "secret"].includes([...group.transferKinds][0])
+          ? [...group.transferKinds][0]
+          : null;
+      const requestLabel = specialKind
+        ? specialKind === "clipboard"
+          ? "from clipboard"
+          : "secret"
+        : fileLabel;
       const canAct = group.canAct || group.transferIds.length > 0;
 
       const card = el(`
@@ -622,7 +634,7 @@
           <div class="card-row">
             <div class="card-icon">${ICON.laptop}</div>
             <div class="card-main">
-              <div class="card-title">${escapeHtml(group.fromName)} wants to send ${fileLabel}</div>
+              <div class="card-title">${escapeHtml(group.fromName)} wants to send ${requestLabel}</div>
               <div class="card-sub">${formatBytes(group.totalBytes)} total${queuedCount > 0 ? ` &middot; ${queuedCount} more request(s) waiting` : ""}</div>
             </div>
             <div class="card-actions">

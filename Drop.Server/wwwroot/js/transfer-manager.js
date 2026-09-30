@@ -940,7 +940,9 @@
       if (transport) job.transport = transport;
 
       job.currentFileIndex = msg.fileIndex;
+
       if (job.receivedAt === null) job.receivedAt = Date.now();
+      
       job.phase = "transferring";
       resetProgressClock(job, job.receivedBytes);
 

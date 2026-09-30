@@ -241,6 +241,7 @@
           if (!hasCompletedMarker) continue;
 
           let metadata = {};
+
           try {
             metadata = JSON.parse(await (await markerHandle.getFile()).text());
           } catch {
