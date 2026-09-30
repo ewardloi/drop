@@ -162,6 +162,7 @@
     rc.addEventListener("message:peers", (e) => {
       selfCanUpload = e.detail.selfCanUpload !== false;
       window.UI.setTransportAvailability(tm, selfCanUpload);
+      window.UI.setNetworkAvailability(selfCanUpload);
       window.UI.renderDevices(e.detail.peers, onPick, selfCanUpload);
     });
 

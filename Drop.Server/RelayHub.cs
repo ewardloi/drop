@@ -283,16 +283,19 @@ public class RelayHub(ILogger logger)
         {
             var peers = new JsonArray();
 
-            foreach (var other in _clients.Values)
+            if (client.CanUpload)
             {
-                if (other.Id == client.Id) continue;
-
-                peers.Add(new JsonObject
+                foreach (var other in _clients.Values)
                 {
-                    ["id"] = other.Id,
-                    ["name"] = other.Name,
-                    ["canUpload"] = other.CanUpload
-                });
+                    if (other.Id == client.Id) continue;
+
+                    peers.Add(new JsonObject
+                    {
+                        ["id"] = other.Id,
+                        ["name"] = other.Name,
+                        ["canUpload"] = other.CanUpload
+                    });
+                }
             }
 
             await SafeSendJsonAsync(client, new JsonObject

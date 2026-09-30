@@ -183,6 +183,13 @@
     }
   }
 
+  function setNetworkAvailability(canUpload) {
+    const panel = document.querySelector(".devices-panel");
+    if (!panel) return;
+
+    panel.style.display = canUpload ? "" : "none";
+  }
+
   function initTransportToggle(tm) {
     const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
     const normalizedSaved = ["auto", "p2p-only", "relay"].includes(saved)
@@ -1070,6 +1077,7 @@
     initTheme,
     initTransportToggle,
     setTransportAvailability,
+    setNetworkAvailability,
     initNavMenu,
     toast,
     renderDevices,
