@@ -100,6 +100,7 @@
     const tm = new window.TransferManager(rc);
 
     window.UI.initTransportToggle(tm);
+    window.UI.setTransportAvailability(tm, true);
     window.UI.initNavMenu();
 
     let pendingTarget = null;
@@ -160,6 +161,7 @@
 
     rc.addEventListener("message:peers", (e) => {
       selfCanUpload = e.detail.selfCanUpload !== false;
+      window.UI.setTransportAvailability(tm, selfCanUpload);
       window.UI.renderDevices(e.detail.peers, onPick, selfCanUpload);
     });
 

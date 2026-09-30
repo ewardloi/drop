@@ -83,8 +83,9 @@
       super();
 
       this.rc = relayClient;
-      
-      this.webrtcEnabled = false;
+
+      this.transportMode = "auto";
+      this.webrtcEnabled = true;
       this.outgoing = new Map();
       this.incoming = new Map();
       this.outgoingQueue = [];
@@ -522,17 +523,28 @@
       this._emitOutgoing();
       log.info(`Transfer ${transferId} accepted, starting upload`);
 
+      const canUseWebrtc = this.webrtcEnabled && !job.forceRelay && remoteWantsWebrtc;
+
       if (job.forceRelay) {
         log.info(
           `Transfer ${transferId} is going to a remote peer, skipping WebRTC and using the relay`,
         );
-      } else if (this.webrtcEnabled && !remoteWantsWebrtc) {
+      } else if (this.transportMode === "relay") {
+        log.info(`Transfer ${transferId}: relay-only mode enabled`);
+      } else if (!remoteWantsWebrtc) {
+        if (this.transportMode === "p2p-only") {
+          throw new Error(
+            `Transfer ${transferId}: receiver does not allow direct P2P, aborting as required by P2P-only mode.`,
+          );
+        }
         log.info(
-          `Transfer ${transferId}: receiver has WebRTC off, using the relay`,
+          `Transfer ${transferId}: receiver is not using WebRTC, using the relay`,
         );
+      } else if (this.transportMode === "p2p-only") {
+        log.info(`Transfer ${transferId}: P2P-only mode enabled`);
       }
 
-      if (this.webrtcEnabled && !job.forceRelay && remoteWantsWebrtc) {
+      if (canUseWebrtc && this.transportMode !== "relay") {
         const webrtcTransport = new WebRtcTransport(this.rc, transferId);
         this._wireDataListeners(webrtcTransport);
 
@@ -546,6 +558,13 @@
           log.info(`Using WebRTC data channel for transfer ${transferId}`);
         } else {
           webrtcTransport.close();
+
+          if (this.transportMode === "p2p-only") {
+            throw new Error(
+              `P2P connection failed for transfer ${transferId}; aborting as required by the current mode.`,
+            );
+          }
+
           log.info(
             `WebRTC unavailable for transfer ${transferId}, using relay`,
           );
@@ -842,7 +861,7 @@
       let webrtcConnectPromise = null;
       let pendingWebrtcTransport = null;
 
-      if (accepted && this.webrtcEnabled) {
+      if (accepted && this.transportMode !== "relay") {
         pendingWebrtcTransport = new WebRtcTransport(this.rc, transferId);
         this._wireDataListeners(pendingWebrtcTransport);
         webrtcConnectPromise = pendingWebrtcTransport.connect(false, 8000);
@@ -853,7 +872,7 @@
           type: "transfer-response",
           transferId,
           accepted,
-          webrtcEnabled: this.webrtcEnabled,
+          webrtcEnabled: this.transportMode !== "relay",
         });
       } catch (err) {
         log.error("Failed to send transfer response", err);

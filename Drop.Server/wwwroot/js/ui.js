@@ -122,38 +122,74 @@
 
   const TRANSPORT_KEY = "drop.transportMode";
 
-  function applyTransportMode(mode, tm) {
+  function applyTransportMode(mode, tm, canUpload = true) {
+    const normalizedMode = ["auto", "p2p-only", "relay"].includes(mode)
+      ? mode
+      : "auto";
+    const effectiveMode = canUpload ? normalizedMode : "relay";
+
+    const labelByMode = {
+      auto: "Auto",
+      "p2p-only": "P2P only",
+      relay: "Relay",
+    };
+
     document.getElementById("transport-icon-relay").style.display =
-      mode === "webrtc" ? "none" : "";
+      effectiveMode === "relay" ? "" : "none";
     document.getElementById("transport-icon-p2p").style.display =
-      mode === "webrtc" ? "" : "none";
+      effectiveMode === "relay" ? "none" : "";
     document.getElementById("transport-label").textContent =
-      mode === "webrtc" ? "P2P" : "Relay";
+      labelByMode[effectiveMode];
     document.getElementById("transport-toggle").title =
-      mode === "webrtc"
-        ? "Using direct P2P (WebRTC) when possible"
-        : "Using the relay server";
+      !canUpload
+        ? "This device can only receive files"
+        : effectiveMode === "auto"
+          ? "Auto: try direct P2P, then fall back to relay"
+          : effectiveMode === "p2p-only"
+            ? "P2P only: direct connection required"
+            : "Relay only: always route through the server";
 
     for (const item of document.querySelectorAll(
       "#transport-menu .dropdown-item",
     )) {
       item.classList.toggle(
         "selected",
-        item.dataset.transportMode === mode,
+        item.dataset.transportMode === effectiveMode,
       );
     }
 
-    localStorage.setItem(TRANSPORT_KEY, mode);
+    localStorage.setItem(TRANSPORT_KEY, effectiveMode);
 
-    if (tm) tm.webrtcEnabled = mode === "webrtc";
+    if (tm) {
+      tm.transportMode = effectiveMode;
+      tm.webrtcEnabled = effectiveMode !== "relay" && canUpload;
+    }
 
-    log.info(`Transfer mode set to ${mode}`);
+    log.info(`Transfer mode set to ${effectiveMode} (canUpload=${canUpload})`);
+  }
+
+  function setTransportAvailability(tm, canUpload) {
+    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
+    const normalizedSaved = ["auto", "p2p-only", "relay"].includes(saved)
+      ? saved
+      : "auto";
+
+    applyTransportMode(normalizedSaved, tm, canUpload);
+
+    const dropdown = document.getElementById("transport-dropdown");
+    if (dropdown) {
+      dropdown.style.display = canUpload ? "" : "none";
+      dropdown.setAttribute("aria-hidden", String(!canUpload));
+    }
   }
 
   function initTransportToggle(tm) {
-    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "webrtc";
+    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
+    const normalizedSaved = ["auto", "p2p-only", "relay"].includes(saved)
+      ? saved
+      : "auto";
 
-    applyTransportMode(saved, tm);
+    applyTransportMode(normalizedSaved, tm, true);
 
     const dropdown = document.getElementById("transport-dropdown");
     const toggleBtn = document.getElementById("transport-toggle");
@@ -186,13 +222,15 @@
 
     toggleBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (dropdown.style.display === "none") return;
       if (menu.hidden) openMenu();
       else closeMenu();
     });
 
     for (const item of menu.querySelectorAll(".dropdown-item")) {
       item.addEventListener("click", () => {
-        applyTransportMode(item.dataset.transportMode, tm);
+        if (dropdown.style.display === "none") return;
+        applyTransportMode(item.dataset.transportMode, tm, true);
         closeMenu();
       });
     }
@@ -1031,6 +1069,7 @@
     formatBytes,
     initTheme,
     initTransportToggle,
+    setTransportAvailability,
     initNavMenu,
     toast,
     renderDevices,
