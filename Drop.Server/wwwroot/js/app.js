@@ -154,6 +154,13 @@
       }
 
       if (text === null || text === undefined) return;
+      if (text.trim().length === 0) {
+        window.UI.toast(
+          kind === "clipboard" ? "Clipboard is empty" : "Secret cannot be empty",
+          "error",
+        );
+        return;
+      }
       
       const fileName = kind;
       const file = new File([text], fileName, { type: "text/plain" });

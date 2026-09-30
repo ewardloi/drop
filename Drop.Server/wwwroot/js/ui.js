@@ -1306,6 +1306,7 @@
       const form = document.getElementById("text-dialog-form");
       const value = document.getElementById("text-dialog-value");
       const copyButton = document.getElementById("text-dialog-copy");
+      const submitButton = document.getElementById("text-dialog-submit");
       const closeButton = document.getElementById("text-dialog-close");
       document.getElementById("text-dialog-title").textContent = "Send secret";
       textDialogSecretValue = "";
@@ -1314,7 +1315,8 @@
       value.readOnly = false;
       value.classList.add("secret-masked");
       copyButton.hidden = true;
-      document.getElementById("text-dialog-submit").hidden = false;
+      submitButton.hidden = false;
+      submitButton.disabled = true;
       document.getElementById("text-dialog-toggle").hidden = false;
       closeButton.textContent = "Cancel";
       updateTextDialogToggle();
@@ -1330,11 +1332,13 @@
         textDialogSecretValue = "";
         textDialogSecretMasked = false;
         value.value = "";
+        submitButton.disabled = true;
         resolve(result);
       }
       function onSubmit(event) {
         event.preventDefault();
         const text = textDialogSecretValue;
+        if (text.trim().length === 0) return;
         dialog.close();
         finish(text);
       }
@@ -1360,6 +1364,8 @@
   document.getElementById("text-dialog-value").addEventListener("input", (event) => {
     if (document.getElementById("text-dialog").dataset.mode !== "send") return;
     textDialogSecretValue = event.currentTarget.value;
+    document.getElementById("text-dialog-submit").disabled =
+      textDialogSecretValue.trim().length === 0;
   });
   document.getElementById("text-dialog-toggle").addEventListener("click", () => {
     textDialogSecretMasked = !textDialogSecretMasked;
