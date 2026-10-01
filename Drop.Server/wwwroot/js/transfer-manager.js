@@ -149,6 +149,25 @@
       }
     }
 
+    async _sendJsonWhenOpen(obj, timeoutMs, signal) {
+      const deadline = Date.now() + timeoutMs;
+      let lastError;
+
+      while (Date.now() < deadline) {
+        await this.rc.waitForOpen(deadline - Date.now(), signal);
+
+        try {
+          this.rc.sendJson(obj);
+          return;
+        } catch (err) {
+          if (err.message !== "Connection to the server is not open.") throw err;
+          lastError = err;
+        }
+      }
+
+      throw lastError || new Error("Could not reconnect to the server in time.");
+    }
+
     _sendChunkFor(job, transferId, fileIndex, offset, payload) {
       try {
         job.transport.sendChunk(transferId, fileIndex, offset, payload);
@@ -496,30 +515,32 @@
       const connectionWaitController = new AbortController();
       job.connectionWaitController = connectionWaitController;
       
-      try {
-        await this.rc.waitForOpen(60000, connectionWaitController.signal);
-      } finally {
-        if (job.connectionWaitController === connectionWaitController) {
-          job.connectionWaitController = null;
-        }
-      }
-
       if (job.status === "canceled") return;
 
       job.status = "requesting";
       this._emitOutgoing();
 
-      this.rc.sendJson({
-        type: "transfer-request",
-        transferId,
-        targetId: job.targetId,
-        transferKind: job.transferKind,
-        files: job.files.map((f) => ({
-          name: f.name,
-          size: f.size,
-          relativePath: f.relativePath,
-        })),
-      });
+      try {
+        await this._sendJsonWhenOpen(
+          {
+            type: "transfer-request",
+            transferId,
+            targetId: job.targetId,
+            transferKind: job.transferKind,
+            files: job.files.map((f) => ({
+              name: f.name,
+              size: f.size,
+              relativePath: f.relativePath,
+            })),
+          },
+          10000,
+          connectionWaitController.signal,
+        );
+      } finally {
+        if (job.connectionWaitController === connectionWaitController) {
+          job.connectionWaitController = null;
+        }
+      }
 
       const response = await new Promise((resolve) => {
         this._pendingResponses.set(transferId, resolve);

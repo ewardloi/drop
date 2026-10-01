@@ -152,7 +152,9 @@
         const timer = setTimeout(
           () =>
             finish(
-              new Error("Could not reconnect to the server within 60 seconds."),
+              new Error(
+                `Could not reconnect to the server within ${Math.ceil(timeoutMs / 1000)} seconds.`,
+              ),
             ),
           timeoutMs,
         );
