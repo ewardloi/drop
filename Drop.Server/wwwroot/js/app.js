@@ -65,14 +65,18 @@
     window.UI.initGlobalDropOverlay();
 
     const clientId = getOrCreateClientId();
+    const layout = document.querySelector(".layout");
+    const startupLoader = document.getElementById("startup-loader");
     let clientName = localStorage.getItem(NAME_KEY);
 
     if (!clientName) {
+      startupLoader.hidden = true;
       clientName = await openNameDialog("");
       localStorage.setItem(NAME_KEY, clientName);
       log.info("Name set for the first time:", clientName);
     }
 
+    startupLoader.hidden = false;
     document.getElementById("my-device-name").textContent = clientName;
 
     document
@@ -209,6 +213,8 @@
       window.UI.setTransportAvailability(tm, selfCanUpload);
       window.UI.setNetworkAvailability(selfCanUpload);
       window.UI.renderDevices(e.detail.peers, onPick, selfCanUpload);
+      layout.hidden = false;
+      startupLoader.hidden = true;
     });
 
     rc.addEventListener("disconnected", () => {

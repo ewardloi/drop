@@ -26,6 +26,11 @@
   </head>
 
   <body>
+    <div id="startup-loader" class="startup-loader" role="status" aria-live="polite">
+      <span class="startup-spinner spin" aria-hidden="true"></span>
+      <span>Connecting to server...</span>
+    </div>
+
     <div id="drop-overlay" class="drop-overlay" aria-hidden="true">
       <div class="drop-overlay-inner">
         <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
@@ -472,7 +477,7 @@
       </div>
     </header>
 
-    <main class="layout">
+    <main class="layout" hidden>
       <section class="panel devices-panel">
         <div class="panel-header">
           <h2>Nearby devices</h2>
