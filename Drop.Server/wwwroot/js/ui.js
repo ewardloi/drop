@@ -194,6 +194,7 @@
     if (!panel) return;
 
     panel.style.display = canUpload ? "" : "none";
+    document.querySelector(".layout")?.classList.toggle("transfers-only", !canUpload);
   }
 
   function initTransportToggle(tm) {

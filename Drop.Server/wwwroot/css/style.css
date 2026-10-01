@@ -330,6 +330,13 @@ p {
 .layout[hidden] {
   display: none;
 }
+.layout.transfers-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+.layout.transfers-only > .transfers-panel {
+  width: min(100%, 800px);
+  justify-self: center;
+}
 .startup-loader {
   position: fixed;
   inset: 0;
