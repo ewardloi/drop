@@ -143,7 +143,9 @@
     document.getElementById("transport-icon-relay").style.display =
       effectiveMode === "relay" ? "" : "none";
     document.getElementById("transport-icon-p2p").style.display =
-      effectiveMode === "relay" ? "none" : "";
+      effectiveMode === "p2p" ? "" : "none";
+    document.getElementById("transport-icon-auto").style.display =
+      effectiveMode === "auto" ? "" : "none";
     document.getElementById("transport-label").textContent =
       labelByMode[effectiveMode];
     document.getElementById("transport-toggle").title =
@@ -995,19 +997,18 @@
   function createReceivedRow(entry) {
     const special = ["clipboard", "secret"].includes(entry.transferKind);
 
-    const receivedTime = entry.receivedAt
-      ? new Date(entry.receivedAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        })
-      : "";
+    const receivedTime = entry.receivedAt ? new Date(entry.receivedAt).toISOString() : "";
+        
+    const kindLabel = entry.transferKind === "clipboard" 
+      ? "Clipboard" 
+      :  entry.transferKind === "secret" 
+        ? "Secret"
+        : "File";
 
-    const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
-    
+    const senderName = entry.senderName || "Unknown device";
+
     const titleText = special
-      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
+      ? `${kindLabel} (${receivedTime})`
       : entry.relativePath;
 
     const row = el(`
@@ -1016,10 +1017,13 @@
           <div class="card-icon">${ICON.doc}</div>
           <div style="min-width:0; flex:1;">
             <div class="card-title">${escapeHtml(titleText)}</div>
-            <div class="card-sub">${special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size)}</div>
+            <div class="card-sub">${senderName} · ${kindLabel} · ${formatBytes(entry.size)}</div>
           </div>
           <div class="card-actions">
-            ${special ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button><button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
+            ${special
+              ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button>
+                 <button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` 
+              : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
             <button class="btn-danger icon-only del-btn" title="Delete">${ICON.trash}</button>
           </div>
         </div>
