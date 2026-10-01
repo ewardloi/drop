@@ -404,6 +404,9 @@
       if (!job) return;
       log.info(`Canceling outgoing transfer ${transferId}`);
 
+      job.status = "canceled";
+      job.connectionWaitController?.abort();
+
       try {
         this.rc.sendJson({
           type: "transfer-cancel",
@@ -413,8 +416,6 @@
       } catch (err) {
         log.error("Failed to send cancel", err);
       }
-
-      job.status = "canceled";
 
       this._emitOutgoing();
       this._resolvePending(transferId, false);
@@ -437,11 +438,19 @@
       try {
         await this._runOutgoing(nextId);
       } catch (err) {
-        log.error(`Outgoing transfer ${nextId} failed`, err);
-
         const job = this.outgoing.get(nextId);
 
-        if (job) {
+        if (!job || job.status === "canceled") {
+          log.info(`Outgoing transfer ${nextId} canceled`);
+
+          if (job) {
+            this._scheduleForget(this.outgoing, nextId, () =>
+              this._emitOutgoing(),
+            );
+          }
+        } else {
+          log.error(`Outgoing transfer ${nextId} failed`, err);
+          
           job.status = "error";
           job.error = err.message;
 
@@ -465,8 +474,8 @@
           this._scheduleForget(this.outgoing, nextId, () =>
             this._emitOutgoing(),
           );
+          this._toast(`Send failed: ${err.message}`, "error");
         }
-        this._toast(`Send failed: ${err.message}`, "error");
       } finally {
         this.outgoingBusy = false;
         this._pumpOutgoing();
@@ -483,6 +492,19 @@
           );
         return;
       }
+
+      const connectionWaitController = new AbortController();
+      job.connectionWaitController = connectionWaitController;
+      
+      try {
+        await this.rc.waitForOpen(60000, connectionWaitController.signal);
+      } finally {
+        if (job.connectionWaitController === connectionWaitController) {
+          job.connectionWaitController = null;
+        }
+      }
+
+      if (job.status === "canceled") return;
 
       job.status = "requesting";
       this._emitOutgoing();

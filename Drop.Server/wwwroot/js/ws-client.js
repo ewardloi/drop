@@ -122,6 +122,49 @@
       this.socket?.close(1000, "client closing");
     }
 
+    waitForOpen(timeoutMs = 60000, signal) {
+      if (this.connected && this.socket?.readyState === WebSocket.OPEN) {
+        return Promise.resolve();
+      }
+
+      return new Promise((resolve, reject) => {
+        let settled = false;
+
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.removeEventListener("connected", onConnected);
+          signal?.removeEventListener("abort", onAbort);
+          if (error) reject(error);
+          else resolve();
+        };
+
+        const onConnected = () => {
+          if (this.connected && this.socket?.readyState === WebSocket.OPEN) {
+            finish();
+          }
+        };
+        const onAbort = () =>
+          finish(
+            new DOMException("Waiting for connection was canceled.", "AbortError"),
+          );
+        const timer = setTimeout(
+          () =>
+            finish(
+              new Error("Could not reconnect to the server within 60 seconds."),
+            ),
+          timeoutMs,
+        );
+
+        this.addEventListener("connected", onConnected);
+        signal?.addEventListener("abort", onAbort, { once: true });
+
+        if (signal?.aborted) onAbort();
+        else onConnected();
+      });
+    }
+
     async _onMessage(ev) {
       if (typeof ev.data === "string") {
         let msg;

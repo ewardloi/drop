@@ -1350,23 +1350,37 @@
     });
   }
 
-  document.getElementById("text-dialog-copy").addEventListener("click", async () => {
+  const textDialogCopyButton = document.getElementById("text-dialog-copy");
+
+  let textDialogCopyResetTimer;
+  
+  textDialogCopyButton.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(textDialogSecretValue);
+      textDialogCopyButton.textContent = "Copied";
+      clearTimeout(textDialogCopyResetTimer);
+  
+      textDialogCopyResetTimer = setTimeout(() => {
+        textDialogCopyButton.textContent = "Copy";
+      }, 2000);
+
       toast("Copied to clipboard", "success");
     } catch (err) {
       toast(`Could not copy text: ${err.message}`, "error");
     }
   });
+
   document.getElementById("text-dialog-close").addEventListener("click", () => {
     document.getElementById("text-dialog").close();
   });
+  
   document.getElementById("text-dialog-value").addEventListener("input", (event) => {
     if (document.getElementById("text-dialog").dataset.mode !== "send") return;
     textDialogSecretValue = event.currentTarget.value;
     document.getElementById("text-dialog-submit").disabled =
       textDialogSecretValue.trim().length === 0;
   });
+  
   document.getElementById("text-dialog-toggle").addEventListener("click", () => {
     textDialogSecretMasked = !textDialogSecretMasked;
     const value = document.getElementById("text-dialog-value");
@@ -1380,6 +1394,7 @@
     updateTextDialogToggle();
     value.focus();
   });
+  
   document.getElementById("text-dialog").addEventListener("close", () => {
     if (document.getElementById("text-dialog").dataset.mode !== "view") return;
     textDialogSecretValue = "";
