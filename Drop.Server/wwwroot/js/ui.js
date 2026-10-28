@@ -126,12 +126,13 @@
     });
   }
 
-  const TRANSPORT_KEY = "drop.transportMode";
+  let selectedTransportMode = "auto";
 
   function applyTransportMode(mode, tm, canUpload = true) {
     const normalizedMode = ["auto", "p2p", "relay"].includes(mode)
       ? mode
       : "auto";
+    if (canUpload) selectedTransportMode = normalizedMode;
     const effectiveMode = canUpload ? normalizedMode : "relay";
 
     const labelByMode = {
@@ -142,10 +143,10 @@
 
     document.getElementById("transport-icon-relay").style.display =
       effectiveMode === "relay" ? "" : "none";
-    document.getElementById("transport-icon-p2p").style.display =
-      effectiveMode === "p2p" ? "" : "none";
     document.getElementById("transport-icon-auto").style.display =
       effectiveMode === "auto" ? "" : "none";
+    document.getElementById("transport-icon-p2p").style.display =
+      effectiveMode === "p2p" ? "" : "none";
     document.getElementById("transport-label").textContent =
       labelByMode[effectiveMode];
     document.getElementById("transport-toggle").title =
@@ -166,8 +167,6 @@
       );
     }
 
-    localStorage.setItem(TRANSPORT_KEY, effectiveMode);
-
     if (tm) {
       tm.transportMode = effectiveMode;
       tm.webrtcEnabled = effectiveMode !== "relay" && canUpload;
@@ -177,12 +176,7 @@
   }
 
   function setTransportAvailability(tm, canUpload) {
-    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
-    const normalizedSaved = ["auto", "p2p", "relay"].includes(saved)
-      ? saved
-      : "auto";
-
-    applyTransportMode(normalizedSaved, tm, canUpload);
+    applyTransportMode(selectedTransportMode, tm, canUpload);
 
     const dropdown = document.getElementById("transport-dropdown");
     if (dropdown) {
@@ -200,12 +194,7 @@
   }
 
   function initTransportToggle(tm) {
-    const saved = localStorage.getItem(TRANSPORT_KEY) ?? "auto";
-    const normalizedSaved = ["auto", "p2p", "relay"].includes(saved)
-      ? saved
-      : "auto";
-
-    applyTransportMode(normalizedSaved, tm, true);
+    applyTransportMode(selectedTransportMode, tm, true);
 
     const dropdown = document.getElementById("transport-dropdown");
     const toggleBtn = document.getElementById("transport-toggle");
@@ -997,18 +986,19 @@
   function createReceivedRow(entry) {
     const special = ["clipboard", "secret"].includes(entry.transferKind);
 
-    const receivedTime = entry.receivedAt ? new Date(entry.receivedAt).toISOString() : "";
-        
-    const kindLabel = entry.transferKind === "clipboard" 
-      ? "Clipboard" 
-      :  entry.transferKind === "secret" 
-        ? "Secret"
-        : "File";
+    const receivedTime = entry.receivedAt
+      ? new Date(entry.receivedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })
+      : "";
 
-    const senderName = entry.senderName || "Unknown device";
-
+    const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
+    
     const titleText = special
-      ? `${kindLabel} (${receivedTime})`
+      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
       : entry.relativePath;
 
     const row = el(`
@@ -1017,13 +1007,10 @@
           <div class="card-icon">${ICON.doc}</div>
           <div style="min-width:0; flex:1;">
             <div class="card-title">${escapeHtml(titleText)}</div>
-            <div class="card-sub">${senderName} · ${kindLabel} · ${formatBytes(entry.size)}</div>
+            <div class="card-sub">${special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size)}</div>
           </div>
           <div class="card-actions">
-            ${special
-              ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button>
-                 <button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` 
-              : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
+            ${special ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button><button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
             <button class="btn-danger icon-only del-btn" title="Delete">${ICON.trash}</button>
           </div>
         </div>
