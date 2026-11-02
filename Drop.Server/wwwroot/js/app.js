@@ -5,6 +5,22 @@
   const ID_KEY = "drop.clientId";
   const NAME_KEY = "drop.clientName";
   const SESSION_KEY = "drop.session";
+  const EXTENSIONS_BY_MIME_TYPE = Object.freeze({
+    "image/png": "png",
+    "text/html": "html",
+    "text/plain": "txt",
+  });
+
+  function tryGetExtensionFromMimeType(mimeType) {
+    const type = String(mimeType || "")
+      .toLowerCase()
+      .split(";")[0]
+      .trim();
+    if (EXTENSIONS_BY_MIME_TYPE[type]) return EXTENSIONS_BY_MIME_TYPE[type];
+
+    const subtype = type.split("/")[1]?.split("+")[0] || "bin";
+    return subtype.replace(/[^a-z0-9_-]/g, "_");
+  }
 
   function getOrCreateClientId() {
     let id = localStorage.getItem(ID_KEY);
@@ -138,16 +154,53 @@
       }
     }
 
+    async function readClipboardEntries() {
+      const clipboard = navigator.clipboard;
+      if (typeof clipboard.read === "function") {
+        const items = await clipboard.read();
+        const entries = [];
+
+        for (const item of items) {
+          for (const itemType of item.types) {
+            const type = itemType.toLowerCase().split(";")[0];
+            const blob = await item.getType(itemType);
+            const file = new File(
+              [blob],
+              `${Date.now() + entries.length + 1}.${tryGetExtensionFromMimeType(type)}`,
+              { type },
+            );
+            entries.push({ file, relativePath: file.name });
+          }
+        }
+
+        if (entries.length > 0) return entries;
+        throw new Error("Clipboard is empty");
+      }
+
+      const text = await clipboard.readText();
+      if (text.length === 0) throw new Error("Clipboard is empty");
+      const file = new File([text], `${Date.now()}.txt`, { type: "text/plain" });
+      return [{ file, relativePath: file.name }];
+    }
+
     async function sendText(peer, kind) {
-      let text;
+      let entries;
 
       try {
-        text = kind === "clipboard"
-          ? await navigator.clipboard.readText()
-          : await window.UI.promptSecret();
+        if (kind === "clipboard") {
+          entries = await readClipboardEntries();
+        } else {
+          const text = await window.UI.promptSecret();
+          if (text === null || text === undefined) return;
+          if (text.trim().length === 0) {
+            window.UI.toast("Secret cannot be empty", "error");
+            return;
+          }
+          const file = new File([text], "secret", { type: "text/plain" });
+          entries = [{ file, relativePath: file.name }];
+        }
       } catch (err) {
-        log.error(`Could not read ${kind} text`, err);
-      
+        log.error(`Could not prepare ${kind}`, err);
         window.UI.toast(
           kind === "clipboard"
             ? `Could not read the clipboard: ${err.message}`
@@ -157,22 +210,10 @@
         return;
       }
 
-      if (text === null || text === undefined) return;
-      if (text.trim().length === 0) {
-        window.UI.toast(
-          kind === "clipboard" ? "Clipboard is empty" : "Secret cannot be empty",
-          "error",
-        );
-        return;
-      }
-      
-      const fileName = kind;
-      const file = new File([text], fileName, { type: "text/plain" });
-      
       tm.queueSend(
         peer.id,
         peer.name,
-        [{ file, relativePath: fileName }],
+        entries,
         isRemotePeer(peer),
         kind,
       );

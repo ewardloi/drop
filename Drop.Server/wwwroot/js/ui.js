@@ -983,22 +983,30 @@
     return `${entry.transferId}:${entry.relativePath}`;
   }
 
-  function createReceivedRow(entry) {
-    const special = ["clipboard", "secret"].includes(entry.transferKind);
-
-    const receivedTime = entry.receivedAt
-      ? new Date(entry.receivedAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
+  function formatReceivedAt(receivedAt) {
+    return receivedAt
+      ? new Date(receivedAt).toLocaleString([], {
+          dateStyle: "short",
+          timeStyle: "medium",
         })
       : "";
+  }
 
+  function isClipboardText(entry) {
+    const fileName = entry.name || entry.relativePath || "";
+    return (
+      entry.transferKind === "clipboard" &&
+      fileName.toLowerCase().endsWith(".txt")
+    );
+  }
+
+  function createReceivedRow(entry) {
+    const special = ["clipboard", "secret"].includes(entry.transferKind);
+    const textActions =
+      entry.transferKind === "secret" || isClipboardText(entry);
     const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
-    
     const titleText = special
-      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
+      ? `${entry.senderName || "Unknown device"} · ${kindLabel}`
       : entry.relativePath;
 
     const row = el(`
@@ -1008,9 +1016,13 @@
           <div style="min-width:0; flex:1;">
             <div class="card-title">${escapeHtml(titleText)}</div>
             <div class="card-sub">${special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size)}</div>
+            <div class="card-time">${escapeHtml(formatReceivedAt(entry.receivedAt))}</div>
           </div>
           <div class="card-actions">
-            ${special ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button><button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>` : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
+            ${textActions
+              ? `<button class="btn-secondary icon-only view-btn" title="View">${ICON.eye}</button>
+                 <button class="btn-secondary icon-only copy-btn" title="Copy">${ICON.copy}</button>`
+              : `<button class="btn-secondary icon-only dl-btn" title="Download">${ICON.download}</button>`}
             <button class="btn-danger icon-only del-btn" title="Delete">${ICON.trash}</button>
           </div>
         </div>
@@ -1018,17 +1030,14 @@
     `);
 
     const downloadButton = row.querySelector(".dl-btn");
-
-    if (downloadButton) downloadButton.addEventListener("click", (e) => {
-      withBusyButton(e.currentTarget, "Downloading…", () => downloadEntry(entry), { iconOnly: true });
+    if (downloadButton) downloadButton.addEventListener("click", (event) => {
+      withBusyButton(event.currentTarget, "Downloading…", () => downloadEntry(entry), { iconOnly: true });
     });
 
     const viewButton = row.querySelector(".view-btn");
-
     if (viewButton) viewButton.addEventListener("click", () => viewReceivedText(entry));
 
     const copyButton = row.querySelector(".copy-btn");
-
     if (copyButton) copyButton.addEventListener("click", () => copyReceivedText(entry));
 
     row.querySelector(".del-btn").addEventListener("click", async () => {
@@ -1055,15 +1064,25 @@
     const sub = row.querySelector(".card-sub");
 
     const special = ["clipboard", "secret"].includes(entry.transferKind);
-    const receivedTime = entry.receivedAt
-      ? new Date(entry.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
-      : "";
     const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
     title.textContent = special
-      ? `${entry.senderName || "Unknown device"} · ${kindLabel} · ${receivedTime}`
+      ? `${entry.senderName || "Unknown device"} · ${kindLabel}`
       : entry.relativePath;
     title.title = title.textContent;
     sub.textContent = special ? `${kindLabel} · ${formatBytes(entry.size)}` : formatBytes(entry.size);
+
+    let time = row.querySelector(".card-time");
+    const receivedAt = special ? formatReceivedAt(entry.receivedAt) : "";
+    if (receivedAt) {
+      if (!time) {
+        time = document.createElement("div");
+        time.className = "card-time";
+        sub.after(time);
+      }
+      time.textContent = receivedAt;
+    } else {
+      time?.remove();
+    }
   }
 
   const INCOMING_TERMINAL_STATUSES = new Set([
@@ -1129,7 +1148,8 @@
     clearAllBtn.style.display = shouldHideClearAll ? "none" : "";
 
     const downloadableEntries = entries.filter(
-      (entry) => !["clipboard", "secret"].includes(entry.transferKind),
+      (entry) =>
+        entry.transferKind !== "secret" && !isClipboardText(entry),
     );
     const shouldHideDownloadAll = isSafari() || downloadableEntries.length < 2;
     downloadAllBtn.hidden = shouldHideDownloadAll;
