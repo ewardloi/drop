@@ -19,13 +19,17 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 var logger = app.Logger;
+var totp = new TotpAuthenticator(builder.Configuration["DROP_TOTP_SECRET"]);
+logger.LogWarning("TOTP provisioning URI (contains the shared secret): {OtpAuthUri}", totp.GetOtpAuthUri());
+if (string.IsNullOrWhiteSpace(builder.Configuration["DROP_TOTP_SECRET"]))
+    logger.LogWarning("Generated temporary TOTP secret: {TotpSecret}. Set DROP_TOTP_SECRET to this value to keep access codes stable across restarts.", totp.Secret);
 
 app.UseForwardedHeaders();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 
-var hub = new RelayHub(logger);
+var hub = new RelayHub(logger, totp);
 
 app.Map("/ws", async context =>
 {
@@ -52,14 +56,14 @@ app.Map("/ws", async context =>
     }
 
     var remoteIp = IpHelper.ResolveClientIpAddress(context);
-    var canUpload = IpHelper.IsPrivateOrLocalAddress(remoteIp);
-    var accessMode = canUpload ? "upload+download" : "download-only";
+    var isLocalNetwork = IpHelper.IsPrivateOrLocalAddress(remoteIp);
+    var accessMode = isLocalNetwork ? "upload+download" : "download-only";
 
     using var socket = await context.WebSockets.AcceptWebSocketAsync();
 
     logger.LogInformation("Client connected id={Id} name={Name} remote={RemoteIp} access={AccessMode}", id, name, remoteIp, accessMode);
 
-    await hub.HandleClientAsync(id, name, socket, canUpload, context.RequestAborted);
+    await hub.HandleClientAsync(id, name, socket, isLocalNetwork, context.RequestAborted);
 });
 
 app.Run();

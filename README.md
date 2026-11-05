@@ -12,6 +12,23 @@ docker compose up --build
 
 The app listens on **http://localhost:10010**.
 
+On startup, the server logs a TOTP provisioning URI. If `DROP_TOTP_SECRET` is
+not set, it generates a temporary secret and logs its Base32 value. To keep
+authenticator codes valid across container restarts, put that value in a
+`.env` file next to `docker-compose.yaml`:
+
+```dotenv
+DROP_TOTP_SECRET=BASE32_SECRET_FROM_THE_LOG
+```
+
+The provisioning URI and generated secret are credentials; restrict access to
+container logs and do not publish them.
+
+Remote TOTP access and per-device upload permissions survive reconnects in the
+same browser tab. A session can resume for up to one minute after disconnect;
+after that its access and upload permissions are dropped. Restarting the server
+also clears them.
+
 ## Run without Docker
 
 Requires the .NET 10 SDK.

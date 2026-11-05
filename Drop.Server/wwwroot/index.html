@@ -620,10 +620,11 @@
 
     <dialog id="name-dialog" class="dialog">
       <form method="dialog" id="name-form">
-        <h3>What's this device called?</h3>
+        <h3>Device settings</h3>
         <p class="dialog-hint">
-          Other people on the network will see this name when you're online.
+          Choose how this device appears to others on the network.
         </p>
+        <label for="name-input" class="dialog-field-label">Device name</label>
         <input
           id="name-input"
           type="text"
@@ -633,8 +634,30 @@
           required
         />
         <div class="dialog-actions">
-          <button type="submit" class="btn-primary">Save</button>
+          <button type="submit" class="btn-primary">Save name</button>
         </div>
+        <section id="name-access-panel" class="name-access-panel" hidden aria-labelledby="name-access-title">
+          <div class="name-access-heading">
+            <h4 id="name-access-title">Remote access</h4>
+            <p>Verify with your authenticator to see all devices and send files.</p>
+          </div>
+          <button id="name-access-request" type="button" class="btn-secondary">Request access</button>
+          <div id="name-access-code-row" class="name-access-code-row" hidden>
+            <input
+              id="name-access-code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              placeholder="6-digit code"
+              aria-label="Authenticator code"
+              hidden
+            />
+            <button id="name-access-verify" type="button" class="btn-primary" hidden>Verify</button>
+          </div>
+          <p id="name-access-status" class="name-access-status" role="status" hidden></p>
+        </section>
       </form>
     </dialog>
 

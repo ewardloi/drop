@@ -354,7 +354,7 @@
     }, 5000);
   }
 
-  function renderDevices(peers, onPick, selfCanUpload) {
+  function renderDevices(peers, onPick, selfCanUpload, canManageUploaders = false) {
     const grid = document.getElementById("devices-grid");
     const empty = document.getElementById("devices-empty");
     const count = document.getElementById("peer-count");
@@ -370,7 +370,7 @@
 
     for (const peer of peers) {
       const canUpload = peer.canUpload !== false;
-      const mode = canUpload && selfCanUpload ? "local" : "remote";
+      const mode = peer.isLocalNetwork === true ? "local" : "remote";
 
       const card = el(`
         <div class="device-card ${canUpload ? "" : "download-only"} ${selfCanUpload ? "" : "upload-disabled"}" role="listitem" data-id="${peer.id}" title="${selfCanUpload ? "Click to send files, Shift+Click to send a folder, or right-click for more options" : "You are on a public network and can only receive files"}">
@@ -404,6 +404,7 @@
           <button type="button" role="menuitem" data-action="folder">${ICON.folder}<span>Send folder</span></button>
           <button type="button" role="menuitem" data-action="clipboard">${ICON.copy}<span>Send from clipboard</span></button>
           <button type="button" role="menuitem" data-action="secret">${ICON.doc}<span>Send secret</span></button>
+          ${canManageUploaders && !canUpload ? `<button type="button" role="menuitem" data-action="${peer.canUploadToSelf ? "revoke-upload" : "allow-upload"}">${peer.canUploadToSelf ? ICON.x : ICON.check}<span>${peer.canUploadToSelf ? "Revoke upload access" : "Allow uploads to me"}</span></button>` : ""}
         </div>
       `);
       document.body.appendChild(menu);

@@ -954,7 +954,7 @@ p {
   background: var(--color-bg-elevated);
   color: var(--color-text);
   box-shadow: var(--shadow-pop);
-  width: min(90vw, 380px);
+  width: min(90vw, 410px);
 }
 .text-dialog {
   width: min(92vw, 560px);
@@ -1004,12 +1004,63 @@ p {
   font-size: 12.5px;
   margin-bottom: 14px;
 }
+.dialog-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.name-access-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.name-access-heading h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.name-access-heading p {
+  margin: 0 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.name-access-code-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+#name-access-code {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 10px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+#name-access-status {
+  margin: 10px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.dialog-hint[hidden],
+.name-access-panel[hidden],
+#name-access-code-row[hidden],
+#name-access-code[hidden] {
+  display: none !important;
+}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
   margin-top: 16px;
+}
+.dialog-actions .btn-primary {
+  min-width: 96px;
 }
 .visibility-toggle {
   display: inline-flex;

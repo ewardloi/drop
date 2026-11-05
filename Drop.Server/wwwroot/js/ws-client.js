@@ -62,14 +62,16 @@
       this.socket = null;
       this.id = null;
       this.name = null;
+      this.sessionToken = null;
       this.reconnectDelay = 1000;
       this.shouldReconnect = true;
       this.connected = false;
     }
 
-    connect(id, name) {
+    connect(id, name, sessionToken = null) {
       this.id = id;
       this.name = name;
+      this.sessionToken = sessionToken;
       this.shouldReconnect = true;
       this._open();
     }
@@ -87,11 +89,13 @@
       this.socket = socket;
 
       socket.addEventListener("open", () => {
-        log.info("Connection open");
-
-        this.connected = true;
+        log.info("Connection open; resuming session");
+        this.connected = false;
         this.reconnectDelay = 1000;
-        this.dispatchEvent(new CustomEvent("connected"));
+        socket.send(JSON.stringify({
+          type: "resume-session",
+          token: this.sessionToken,
+        }));
       });
 
       socket.addEventListener("message", (ev) => this._onMessage(ev));
@@ -178,12 +182,21 @@
           return;
         }
 
-        log.debug("-> ", msg.type, msg);
+        const loggedMessage = msg.type === "session-ready"
+          ? { ...msg, token: "[redacted]" }
+          : msg;
+        log.debug("-> ", msg.type, loggedMessage);
 
         this.dispatchEvent(new CustomEvent("message", { detail: msg }));
         this.dispatchEvent(
           new CustomEvent(`message:${msg.type}`, { detail: msg }),
         );
+
+        if (msg.type === "session-ready") {
+          this.sessionToken = msg.token;
+          this.connected = true;
+          this.dispatchEvent(new CustomEvent("connected"));
+        }
 
         return;
       }
@@ -219,18 +232,22 @@
     }
 
     sendJson(obj) {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-        log.error("Cannot send, socket not open", obj);
-        throw new Error("Connection to the server is not open.");
+      const loggedMessage = obj.type === "request-access"
+        ? { ...obj, code: "[redacted]" }
+        : obj;
+
+      if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        log.error("Cannot send, socket not ready", loggedMessage);
+        throw new Error("Connection to the server is not ready.");
       }
 
-      log.debug("<- ", obj.type, obj);
+      log.debug("<- ", obj.type, loggedMessage);
 
       this.socket.send(JSON.stringify(obj));
     }
 
     sendChunk(transferId, fileIndex, offset, payload) {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
         throw new Error("Connection to the server is not open.");
       }
 

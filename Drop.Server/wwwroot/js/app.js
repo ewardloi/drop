@@ -5,6 +5,8 @@
   const ID_KEY = "drop.clientId";
   const NAME_KEY = "drop.clientName";
   const SESSION_KEY = "drop.session";
+  const AUTH_SESSION_KEY = "drop.authSession";
+  let accessRequestResultHandler = null;
   const EXTENSIONS_BY_MIME_TYPE = Object.freeze({
     "image/png": "png",
     "text/html": "html",
@@ -34,18 +36,41 @@
     return id;
   }
 
-  function openNameDialog(initialValue) {
+  function openNameDialog(
+    initialValue,
+    canRequestAccess = false,
+    requestAccess = () => {},
+  ) {
     return new Promise((resolve) => {
       const dialog = document.getElementById("name-dialog");
       const input = document.getElementById("name-input");
       const form = document.getElementById("name-form");
+      const accessPanel = document.getElementById("name-access-panel");
+      const requestButton = document.getElementById("name-access-request");
+      const codeRow = document.getElementById("name-access-code-row");
+      const verifyButton = document.getElementById("name-access-verify");
+      const codeInput = document.getElementById("name-access-code");
+      const accessStatus = document.getElementById("name-access-status");
 
       input.value = initialValue || "";
+      accessPanel.hidden = !canRequestAccess;
+      codeRow.hidden = true;
+      codeInput.value = "";
+      codeInput.hidden = true;
+      requestButton.hidden = false;
+      verifyButton.hidden = true;
+      verifyButton.disabled = false;
+      accessStatus.hidden = true;
+      accessStatus.textContent = "";
       dialog.showModal();
       input.focus();
 
       function onSubmit(e) {
         e.preventDefault();
+        if (document.activeElement === codeInput) {
+          onVerifyAccess();
+          return;
+        }
         const value = input.value.trim();
         if (!value) return;
         cleanup();
@@ -53,11 +78,55 @@
         resolve(value);
       }
 
+      function onRequestAccess() {
+        codeRow.hidden = false;
+        codeInput.hidden = false;
+        requestButton.hidden = true;
+        verifyButton.hidden = false;
+        codeInput.focus();
+      }
+
+      function onVerifyAccess() {
+        const code = codeInput.value.trim();
+        if (!/^[0-9]{6}$/.test(code)) {
+          accessStatus.textContent = "Enter a valid 6-digit code.";
+          accessStatus.hidden = false;
+          return;
+        }
+
+        verifyButton.disabled = true;
+        accessStatus.textContent = "Checking code...";
+        accessStatus.hidden = false;
+        try {
+          requestAccess(code);
+        } catch (err) {
+          verifyButton.disabled = false;
+          accessStatus.textContent = err.message;
+        }
+      }
+
       function cleanup() {
         form.removeEventListener("submit", onSubmit);
+        requestButton.removeEventListener("click", onRequestAccess);
+        verifyButton.removeEventListener("click", onVerifyAccess);
+        accessRequestResultHandler = null;
       }
 
       form.addEventListener("submit", onSubmit);
+      requestButton.addEventListener("click", onRequestAccess);
+      verifyButton.addEventListener("click", onVerifyAccess);
+      accessRequestResultHandler = (result) => {
+        verifyButton.disabled = false;
+        if (result.granted) {
+          cleanup();
+          dialog.close();
+          resolve(initialValue || "");
+          return;
+        }
+
+        accessStatus.textContent = "That code was not accepted. Try again.";
+        accessStatus.hidden = false;
+      };
     });
   }
 
@@ -98,7 +167,11 @@
     document
       .getElementById("my-device-btn")
       .addEventListener("click", async () => {
-        const newName = await openNameDialog(clientName);
+        const newName = await openNameDialog(
+          clientName,
+          !selfCanManageUploaders,
+          (code) => rc.sendJson({ type: "request-access", code }),
+        );
         if (newName && newName !== clientName) {
           clientName = newName;
           localStorage.setItem(NAME_KEY, clientName);
@@ -127,12 +200,26 @@
     const filePicker = document.getElementById("file-picker");
     const folderPicker = document.getElementById("folder-picker");
     let selfCanUpload = true;
+    let selfCanManageUploaders = false;
 
     function isRemotePeer(peer) {
       return !((peer.canUpload !== false) && selfCanUpload);
     }
 
     function onPick(peer, mode, entries) {
+      if (mode === "allow-upload" || mode === "revoke-upload") {
+        try {
+          rc.sendJson({
+            type: "set-uploader-permission",
+            uploaderId: peer.id,
+            allowed: mode === "allow-upload",
+          });
+        } catch (err) {
+          window.UI.toast(err.message, "error");
+        }
+        return;
+      }
+
       if (entries) {
         tm.queueSend(peer.id, peer.name, entries, isRemotePeer(peer));
         return;
@@ -251,15 +338,37 @@
 
     rc.addEventListener("message:peers", (e) => {
       selfCanUpload = e.detail.selfCanUpload !== false;
+      selfCanManageUploaders = e.detail.canManageUploaders === true;
       window.UI.setTransportAvailability(tm, selfCanUpload);
       window.UI.setNetworkAvailability(selfCanUpload);
-      window.UI.renderDevices(e.detail.peers, onPick, selfCanUpload);
+      window.UI.renderDevices(
+        e.detail.peers,
+        onPick,
+        selfCanUpload,
+        selfCanManageUploaders,
+      );
       layout.hidden = false;
       startupLoader.hidden = true;
     });
 
     rc.addEventListener("disconnected", () => {
-      window.UI.renderDevices([], onPick);
+      selfCanUpload = false;
+      selfCanManageUploaders = false;
+      window.UI.setTransportAvailability(tm, false);
+      window.UI.setNetworkAvailability(false);
+      window.UI.renderDevices([], onPick, false, false);
+    });
+
+    rc.addEventListener("message:access-result", (e) => {
+      accessRequestResultHandler?.(e.detail);
+    });
+
+    rc.addEventListener("message:session-ready", (e) => {
+      try {
+        sessionStorage.setItem(AUTH_SESSION_KEY, e.detail.token);
+      } catch (err) {
+        log.warn("Could not persist session token for reconnects", err);
+      }
     });
 
     tm.addEventListener("outgoing-changed", (e) => renderActive());
@@ -295,7 +404,13 @@
     }
 
     window.UI.renderReceivedFiles(tm);
-    rc.connect(clientId, clientName);
+    let authSessionToken = null;
+    try {
+      authSessionToken = sessionStorage.getItem(AUTH_SESSION_KEY);
+    } catch (err) {
+      log.warn("Could not read the session token; reconnects will start a new session", err);
+    }
+    rc.connect(clientId, clientName, authSessionToken);
 
     log.info("Drop ready. clientId =", clientId, "name =", clientName);
   }
