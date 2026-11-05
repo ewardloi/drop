@@ -7,58 +7,6 @@ using System.Text.Json.Nodes;
 
 namespace Drop.Server;
 
-internal sealed class ClientSession(string token)
-{
-    private readonly ConcurrentDictionary<string, byte> _allowedUploaders = new();
-    private int _hasTotpAccess;
-    private long _lastSeenUtcTicks = DateTime.UtcNow.Ticks;
-
-    public string Token { get; } = token;
-
-    public bool HasTotpAccess => Volatile.Read(ref _hasTotpAccess) != 0;
-
-    public DateTime LastSeenUtc => new(Interlocked.Read(ref _lastSeenUtcTicks), DateTimeKind.Utc);
-
-    public void GrantTotpAccess() => Volatile.Write(ref _hasTotpAccess, 1);
-
-    public void Touch() => Interlocked.Exchange(ref _lastSeenUtcTicks, DateTime.UtcNow.Ticks);
-
-    public bool AllowsUploader(string uploaderToken) => _allowedUploaders.ContainsKey(uploaderToken);
-
-    public void SetUploaderAllowed(string uploaderToken, bool allowed)
-    {
-        if (allowed)
-            _allowedUploaders[uploaderToken] = 0;
-        else
-            _allowedUploaders.TryRemove(uploaderToken, out _);
-    }
-}
-
-internal sealed class ClientConnection(string id, string name, WebSocket socket, bool isLocalNetwork)
-{
-    public string Id { get; } = id;
-
-    public string Name { get; set; } = name;
-
-    public WebSocket Socket { get; } = socket;
-
-    public bool IsLocalNetwork { get; } = isLocalNetwork;
-
-    public ClientSession? Session { get; private set; }
-
-    public bool CanUpload => IsLocalNetwork || Session?.HasTotpAccess == true;
-
-    public void SetSession(ClientSession session) => Session = session;
-
-    public bool AllowsUploader(string uploaderToken) => Session?.AllowsUploader(uploaderToken) == true;
-
-    public void SetUploaderAllowed(string uploaderToken, bool allowed) => Session?.SetUploaderAllowed(uploaderToken, allowed);
-
-    public SemaphoreSlim SendLock { get; } = new(1, 1);
-}
-
-internal sealed record TransferRoute(string SenderId, string ReceiverId);
-
 public class RelayHub(ILogger logger, TotpAuthenticator totp)
 {
     private readonly ConcurrentDictionary<string, ClientConnection> _clients = new();

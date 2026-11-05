@@ -20,6 +20,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 var app = builder.Build();
 var logger = app.Logger;
 var totp = new TotpAuthenticator(builder.Configuration["DROP_TOTP_SECRET"]);
+
 logger.LogWarning("TOTP provisioning URI (contains the shared secret): {OtpAuthUri}", totp.GetOtpAuthUri());
 if (string.IsNullOrWhiteSpace(builder.Configuration["DROP_TOTP_SECRET"]))
     logger.LogWarning("Generated temporary TOTP secret: {TotpSecret}. Set DROP_TOTP_SECRET to this value to keep access codes stable across restarts.", totp.Secret);
