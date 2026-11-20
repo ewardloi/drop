@@ -24,6 +24,23 @@ DROP_TOTP_SECRET=BASE32_SECRET_FROM_THE_LOG
 The provisioning URI and generated secret are credentials; restrict access to
 container logs and do not publish them.
 
+### Local subnets
+
+Clients from the local network can upload without a TOTP code; everyone else is
+download-only until they enter one. Which addresses count as local is set with
+`LOCAL_SUBNETS`, a comma-separated list of CIDR subnets (IPv4 and IPv6):
+
+```dotenv
+LOCAL_SUBNETS=10.10.1.0/24,fdcc:0:0:101::/64
+```
+
+When `LOCAL_SUBNETS` is set, a client is local only if its address falls inside
+one of the listed subnets (loopback is **not** special-cased; add
+`127.0.0.0/8,::1/128` if you need it). A bare address without a prefix is
+treated as a single host. Invalid entries are skipped with a warning in the log.
+When `LOCAL_SUBNETS` is empty or unset, the previous behaviour is kept:
+loopback, private IPv4 (10/8, 172.16/12, 192.168/16) and ULA IPv6 (fc00::/7).
+
 Remote TOTP access and per-device upload permissions survive reconnects in the
 same browser tab. A session can resume for up to one minute after disconnect;
 after that its access and upload permissions are dropped. Restarting the server

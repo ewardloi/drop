@@ -30,6 +30,15 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 
+var localSubnets = IpHelper.ParseLocalSubnets(
+    builder.Configuration["LOCAL_SUBNETS"],
+    invalid => logger.LogWarning("LOCAL_SUBNETS: ignoring invalid entry '{Entry}'", invalid));
+
+if (localSubnets is null)
+    logger.LogInformation("LOCAL_SUBNETS is not set: treating loopback, private IPv4 and ULA IPv6 addresses as local.");
+else
+    logger.LogInformation("LOCAL_SUBNETS: {Count} subnet(s) configured: {Subnets}", localSubnets.Count, string.Join(", ", localSubnets));
+
 var hub = new RelayHub(logger, totp);
 
 app.Map("/ws", async context =>
@@ -57,7 +66,7 @@ app.Map("/ws", async context =>
     }
 
     var remoteIp = IpHelper.ResolveClientIpAddress(context);
-    var isLocalNetwork = IpHelper.IsPrivateOrLocalAddress(remoteIp);
+    var isLocalNetwork = IpHelper.IsPrivateOrLocalAddress(remoteIp, localSubnets);
     var accessMode = isLocalNetwork ? "upload+download" : "download-only";
 
     using var socket = await context.WebSockets.AcceptWebSocketAsync();

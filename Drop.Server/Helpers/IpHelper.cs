@@ -27,16 +27,73 @@ public static class IpHelper
         return context.Connection.RemoteIpAddress;
     }
 
-    public static bool IsPrivateOrLocalAddress(IPAddress? remoteIp)
+    public static IReadOnlyList<IPNetwork>? ParseLocalSubnets(string? value, Action<string>? onInvalid = null)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var result = new List<IPNetwork>();
+        var entries = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var entry in entries)
+        {
+            if (TryParseSubnet(entry, out var network))
+                result.Add(network);
+            else
+                onInvalid?.Invoke(entry);
+        }
+
+        return result;
+    }
+
+    private static bool TryParseSubnet(string entry, out IPNetwork network)
+    {
+        network = default;
+
+        var slash = entry.IndexOf('/');
+        var addressPart = slash < 0 ? entry : entry[..slash];
+
+        if (!IPAddress.TryParse(addressPart, out var address))
+            return false;
+
+        if (address.IsIPv4MappedToIPv6)
+            return false;
+
+        var maxPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+        var prefix = maxPrefix;
+
+        if (slash >= 0 && (!int.TryParse(entry[(slash + 1)..], out prefix) || prefix < 0 || prefix > maxPrefix))
+            return false;
+
+        var bytes = address.GetAddressBytes();
+        for (var bit = prefix; bit < bytes.Length * 8; bit++)
+            bytes[bit / 8] &= (byte)~(0x80 >> (bit % 8));
+
+        network = new IPNetwork(new IPAddress(bytes), prefix);
+        return true;
+    }
+
+    public static bool IsPrivateOrLocalAddress(IPAddress? remoteIp, IReadOnlyList<IPNetwork>? localSubnets = null)
     {
         if (remoteIp is null)
             return false;
 
-        if (IPAddress.IsLoopback(remoteIp))
-            return true;
-
         if (remoteIp.IsIPv4MappedToIPv6)
             remoteIp = remoteIp.MapToIPv4();
+
+        if (localSubnets is not null)
+        {
+            foreach (var subnet in localSubnets)
+            {
+                if (subnet.Contains(remoteIp))
+                    return true;
+            }
+
+            return false;
+        }
+
+        if (IPAddress.IsLoopback(remoteIp))
+            return true;
 
         switch (remoteIp.AddressFamily)
         {

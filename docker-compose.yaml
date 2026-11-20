@@ -11,3 +11,4 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:5000
       - DROP_TOTP_SECRET=${DROP_TOTP_SECRET:-}
+      - LOCAL_SUBNETS=${LOCAL_SUBNETS:-}
