@@ -1001,10 +1001,18 @@
     );
   }
 
+  function isClipboardHtml(entry) {
+    const fileName = entry.name || entry.relativePath || "";
+    return (
+      entry.transferKind === "clipboard" &&
+      fileName.toLowerCase().endsWith(".html")
+    );
+  }
+
   function createReceivedRow(entry) {
     const special = ["clipboard", "secret"].includes(entry.transferKind);
     const textActions =
-      entry.transferKind === "secret" || isClipboardText(entry);
+      entry.transferKind === "secret" || isClipboardText(entry) || isClipboardHtml(entry);
     const kindLabel = entry.transferKind === "clipboard" ? "Clipboard" : "Secret";
     const titleText = special
       ? `${entry.senderName || "Unknown device"} · ${kindLabel}`
@@ -1264,6 +1272,8 @@
       const file = await window.OpfsStore.getFile(entry);
       const dialog = document.getElementById("text-dialog");
       const isSecret = entry.transferKind === "secret";
+      const isHtml = isClipboardHtml(entry);
+
       document.getElementById("text-dialog-title").textContent =
         isSecret ? "Received secret" : "Received clipboard";
       textDialogSecretValue = await file.text();
